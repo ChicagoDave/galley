@@ -82,7 +82,17 @@ struct Run {
 
 // ── Block layer ───────────────────────────────────────────────
 // A flat, ordered sequence. No containment, no nesting.
-enum Block {
+// Every block carries a stable identity so chapter cuts can anchor to
+// it without rotting when unrelated prose is edited (ADR-0010).
+typealias BlockID = Int                               // monotonic per-document counter
+
+struct Block {
+    let id: BlockID                                   // immutable for the block's lifetime
+    var content: BlockContent
+    var overrides: [PresentationOverride] = []        // bounded escape hatch (ADR-0009); empty by default
+}
+
+enum BlockContent {
     case paragraph(runs: [Run])
     case sceneBreak                                   // the "* * *" ornament
     case setPiece(kind: SetPieceKind, lines: [[Run]]) // verse/epigraph/letter
@@ -92,10 +102,20 @@ enum Block {
 // `lines` are preserved hard breaks — see §7.
 enum SetPieceKind { case verse, epigraph, letter }
 
+// The bounded escape hatch (ADR-0009): a small CLOSED set of one-off
+// per-block overrides — never an open style bag. Adding a case demands
+// the same justification any new code does. Empty by default (§7).
+enum PresentationOverride {
+    case alignment(TextAlignment)   // e.g. a one-off left-aligned poem (§7)
+    case smallCaps                  // e.g. a chapter-opener line (§14)
+}
+
+enum TextAlignment { case leading, center, trailing }
+
 // ── Structure layer ───────────────────────────────────────────
 // Chapters are an OVERLAY of cut-points, not containers.
 struct ChapterCut {
-    var beforeBlock: Int        // index into Document.blocks
+    var blockID: BlockID        // stable anchor — survives prose edits (ADR-0010)
     var offsetInBlock: Int?     // nil = block boundary; set = mid-block cut "at the peak"
     var title: String?          // optional, set when you commit the boundary
     var opener: TemplateRef?    // chapter-opener pattern, applied at the cut (§9)
@@ -107,13 +127,15 @@ struct Document {
     var cuts:   [ChapterCut]    // the late-bound chapter overlay, sorted by position
     var bible:  Bible           // reference index (§9)
     var meta:   Metadata
+    private(set) var nextBlockID: BlockID // hands out fresh IDs; never reused (ADR-0010)
 }
 ```
 
-Two things to notice in the types:
+Three things to notice in the types:
 
 1. `offsetInBlock` encodes the writer's core device directly: a chapter cut can land **inside** a block, at an emotional peak, because chapters are annotations over a continuous text rather than containers carved at logical seams.
 2. There is no `Chapter` *struct that owns blocks*. A chapter is computed at render time by walking the block stream and splicing at the cut-points.
+3. A cut anchors to a block by **`blockID`, not array index** — the index is a derived, render-time convenience, so inserting or deleting *unrelated* blocks never disturbs an existing cut (ADR-0010). IDs come from `Document.nextBlockID`, a monotonic counter; the split / merge / delete rules that keep cuts attached during editing live in ADR-0010.
 
 ---
 

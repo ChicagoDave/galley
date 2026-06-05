@@ -12,6 +12,7 @@ Fix the vocabulary: block set = Paragraph, SceneBreak, SetPiece; inline = italic
 
 - Keeps the reveal legible and the product focused; resists code-soup.
 - Some writers will want more (small-caps, centered one-offs); these are handled as rare per-block presentation overrides, not vocabulary growth.
+- The override hatch is itself bounded: modeled as a small **closed** `PresentationOverride` enum on `Block` (overview §4), empty by default, so "rare override" can't quietly become an open style system. Adding a case demands the same justification as any new code.
 
 ## Session
 
