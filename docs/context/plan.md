@@ -43,7 +43,7 @@
   - All four ADR-0010 cut-relocation rules exercised: split re-anchors trailing-half cuts to the new block; merge re-anchors retired-block cuts to the survivor at the merge offset; delete relocates anchored cuts to the nearest surviving boundary (or drops if document empties); same-block-edit shifts offsets.
   - Test suite graded GREEN before commit (no RED or YELLOW assertions).
 - **Exit state**: `swift test` passes with all lifecycle behavioral tests GREEN. Operations and tests committed. The core correctly maintains cut integrity through any block mutation.
-- **Status**: CURRENT
+- **Status**: COMPLETE — `splitBlock`/`mergeBlocks`/`deleteBlock`/`adjustCutOffset` in DocumentEditing.swift (+ BlockText.swift helpers); 19 Swift Testing tests GREEN, 0 warnings. mutation-verification run; all 3 flagged gaps (override inheritance, sceneBreak/setPiece last-block branch, rejection state-unmutated) closed. (session ca5fff, 2026-06-05)
 
 ---
 
@@ -61,4 +61,4 @@
   - Behavioral tests for all DOES and REJECTS WHEN lines: malformed input rejection, lossless round-trip, correct token sequence for each block type (including SetPiece `[line]` codes and `[Chapter]` cut codes), correct REJECTS WHEN for malformed fences or unknown sidecar IDs.
   - Test suite graded GREEN before commit.
 - **Exit state**: `swift test` passes with all parse/serialize and revealProjection tests GREEN. The headless core is complete and committed. `displayProjection`, peek/@-bible, chapter-slicing UI, and templates remain unimplemented — this is correct per scope.
-- **Status**: PENDING
+- **Status**: CURRENT
