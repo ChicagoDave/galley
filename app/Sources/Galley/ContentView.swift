@@ -10,6 +10,7 @@
 //
 
 import SwiftUI
+import AppKit
 import GalleyShell
 
 /// The single-window editing surface, optionally split with the reveal pane.
@@ -27,6 +28,21 @@ struct ContentView: View {
 
     /// Whether the submission-fields panel is shown (toggled with Cmd-Shift-I).
     @State private var showFields = false
+
+    /// Whether the bible reference panel is shown (toggled with Cmd-Shift-B).
+    @State private var showBible = false
+
+    /// Whether the Command key is currently held — when so, the bottom-bar buttons
+    /// reveal their keyboard shortcuts.
+    @State private var commandHeld = false
+
+    /// The local `flagsChanged` monitor tracking the Command key; removed on disappear.
+    @State private var flagsMonitor: Any?
+
+    /// A bar-button title that appends its shortcut hint only while Command is held.
+    private func barLabel(_ title: String, _ shortcut: String) -> String {
+        commandHeld ? "\(title)  \(shortcut)" : title
+    }
 
     /// The buffer currently shown in the window.
     private var current: WorkspaceDocument { workspace.current }
@@ -54,17 +70,24 @@ struct ContentView: View {
                     RevealPane(buffer: current)
                         .frame(width: 340)
                 }
+
+                if showBible {
+                    Divider()
+                    BiblePane(buffer: current)
+                }
             }
 
             Divider()
 
             HStack(spacing: 12) {
-                Button("Open…") { workspace.openWithPanel() }
-                Button("Save…") { workspace.saveCurrentWithPanel() }
-                Button(showFields ? "Hide Fields" : "Fields") { showFields.toggle() }
+                Button(barLabel("Open…", "⌘O")) { workspace.openWithPanel() }
+                Button(barLabel("Save…", "⌘S")) { workspace.saveCurrentWithPanel() }
+                Button(barLabel(showFields ? "Hide Fields" : "Fields", "⌘⇧I")) { showFields.toggle() }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
-                Button(showReveal ? "Hide Reveal" : "Reveal") { showReveal.toggle() }
+                Button(barLabel(showReveal ? "Hide Reveal" : "Reveal", "⌘/")) { showReveal.toggle() }
                     .keyboardShortcut("/", modifiers: .command)
+                Button(barLabel(showBible ? "Hide Bible" : "Bible", "⌘⇧B")) { showBible.toggle() }
+                    .keyboardShortcut("b", modifiers: [.command, .shift])
                 Spacer()
                 Text("Project \(workspace.currentIndex + 1) of \(workspace.documents.count)")
                     .font(.caption)
@@ -81,6 +104,18 @@ struct ContentView: View {
         }
         .frame(minWidth: 700, minHeight: 480)
         .navigationTitle(projectTitle)   // drives the window's title bar
+        .onAppear {
+            // Track the Command key so the bottom-bar buttons can reveal their
+            // shortcuts while it is held.
+            flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+                commandHeld = event.modifierFlags.contains(.command)
+                return event
+            }
+        }
+        .onDisappear {
+            if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+            flagsMonitor = nil
+        }
         .confirmationDialog(
             "Save changes before closing this project?",
             isPresented: Binding(

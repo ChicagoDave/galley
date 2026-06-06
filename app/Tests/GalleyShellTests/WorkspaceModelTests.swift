@@ -97,6 +97,57 @@ struct WorkspaceModelTests {
         #expect(ws.currentIndex == indexBefore)
     }
 
+    // MARK: open(url:) DOES — bible loading (real-path, §9)
+
+    /// open(url:) DOES populate the buffer's bible index from the package's
+    /// `bible/` directory. Runs against real `.md` files on disk — no stub stands
+    /// in for the BibleIndex filesystem read (Integration Reality, ADR-0020).
+    @Test func openLoadsBibleIndexFromPackageBibleDirectory() throws {
+        let url = try writeBundle(makeDocument(text: "Prose."))
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let bibleDir = url.appendingPathComponent("bible", isDirectory: true)
+        try FileManager.default.createDirectory(at: bibleDir, withIntermediateDirectories: true)
+        try "# Aldous Finch\nGruff harbormaster.".write(
+            to: bibleDir.appendingPathComponent("aldous-finch.md"), atomically: true, encoding: .utf8)
+
+        let ws = WorkspaceModel()
+        #expect(ws.open(url: url))
+
+        #expect(ws.current.bibleIndex.entries.count == 1)
+        #expect(ws.current.bibleIndex.entry(named: "Aldous Finch")?.notes == "Gruff harbormaster.")
+    }
+
+    /// open(url:) DOES leave the bible index empty when the package has no `bible/`
+    /// directory — a project without a bible is normal (ADR-0008).
+    @Test func openLeavesBibleIndexEmptyWhenNoBibleDirectory() throws {
+        let url = try writeBundle(makeDocument(text: "Prose."))
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let ws = WorkspaceModel()
+        #expect(ws.open(url: url))
+
+        #expect(ws.current.bibleIndex.entries.isEmpty)
+    }
+
+    /// open(url:) DOES populate the buffer's snippet index from the package's
+    /// `snippets/` directory — the source for `@`-completion (real-path, ADR-0020).
+    @Test func openLoadsSnippetIndexFromPackageSnippetsDirectory() throws {
+        let url = try writeBundle(makeDocument(text: "Prose."))
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let snippetsDir = url.appendingPathComponent("snippets", isDirectory: true)
+        try FileManager.default.createDirectory(at: snippetsDir, withIntermediateDirectories: true)
+        try "LONDON —".write(
+            to: snippetsDir.appendingPathComponent("dateline.txt"), atomically: true, encoding: .utf8)
+
+        let ws = WorkspaceModel()
+        #expect(ws.open(url: url))
+
+        #expect(ws.current.snippetIndex.entries.count == 1)
+        #expect(ws.current.snippetIndex.snippet(named: "Dateline")?.body == "LONDON —")
+    }
+
     // MARK: switchTo(index:) DOES
 
     /// switchTo(index:) DOES set the current index to a valid slot.

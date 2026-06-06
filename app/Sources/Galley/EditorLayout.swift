@@ -88,6 +88,10 @@ struct EditorLayout {
 
     /// Maps a text-view character position to a model `(blockID, offset)`, or `nil`
     /// if it falls in non-editable decoration.
+    ///
+    /// A position past the end of all editable text — e.g. a click in the empty
+    /// area below the last block — clamps to the end of the last editable block, so
+    /// the caret always lands somewhere typeable rather than in dead space.
     func modelPosition(forCharacterAt position: Int) -> (blockID: BlockID, offset: Int)? {
         let nsString = attributedString.string as NSString
         for segment in segments where segment.editable {
@@ -99,7 +103,22 @@ struct EditorLayout {
                 return (id, prefix.count)
             }
         }
+
+        // Past the end of the document text: clamp to the end of the last editable
+        // block so a click below the last block is still typeable.
+        if let last = segments.last(where: { $0.editable && $0.blockID != nil }),
+           let id = last.blockID,
+           position > last.utf16Range.location + last.utf16Range.length {
+            return (id, last.text.count)
+        }
         return nil
+    }
+
+    /// Whether `position` falls past the end of all editable text — i.e. a click in
+    /// the empty area below the last block, rather than within or before the text.
+    func isPastDocumentEnd(_ position: Int) -> Bool {
+        guard let last = segments.last(where: { $0.editable && $0.blockID != nil }) else { return false }
+        return position > last.utf16Range.location + last.utf16Range.length
     }
 
     /// Maps a model `(blockID, offset)` to a text-view character position, or `nil`

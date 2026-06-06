@@ -41,6 +41,15 @@ public final class WorkspaceDocument {
     /// A short human-readable description of the last open/save outcome.
     public private(set) var status: String
 
+    /// The reference bible for this buffer (§9), fuzzy-indexed from the package's
+    /// `bible/` directory — read in the bible side panel. Empty for a never-saved
+    /// buffer (no package on disk yet).
+    public private(set) var bibleIndex = BibleIndex()
+
+    /// The reusable text snippets for this buffer (§9), indexed from the package's
+    /// `snippets/` directory — the source for `@`-completion. Empty until saved.
+    public private(set) var snippetIndex = SnippetIndex()
+
     /// Creates a buffer. Defaults to a fresh blank document with no associated file.
     ///
     /// - Parameters:
@@ -94,7 +103,24 @@ public final class WorkspaceDocument {
         let loaded = try DocumentBundle.read(from: url)
         document = loaded
         fileURL = url
+        reloadIndexes()
         status = "Opened \(url.lastPathComponent) — \(loaded.blocks.count) block(s)."
+    }
+
+    /// Rebuilds `bibleIndex` and `snippetIndex` from the package's `bible/` and
+    /// `snippets/` directories (§9).
+    ///
+    /// Called on load and after the first save; safe to call any time the writer may
+    /// have added or edited reference files. A buffer with no `fileURL`, or a package
+    /// missing a directory, yields the corresponding empty index.
+    public func reloadIndexes() {
+        guard let url = fileURL else {
+            bibleIndex = BibleIndex()
+            snippetIndex = SnippetIndex()
+            return
+        }
+        bibleIndex = BibleIndex.load(directory: url.appendingPathComponent("bible", isDirectory: true))
+        snippetIndex = SnippetIndex.load(directory: url.appendingPathComponent("snippets", isDirectory: true))
     }
 
     /// Writes this buffer to `url` via `DocumentBundle`, recording `fileURL` and
@@ -107,6 +133,7 @@ public final class WorkspaceDocument {
         do {
             try DocumentBundle.write(document, to: url)
             fileURL = url
+            reloadIndexes()
             status = "Saved \(url.lastPathComponent)."
             return true
         } catch {

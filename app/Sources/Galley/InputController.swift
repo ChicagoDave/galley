@@ -35,14 +35,55 @@ final class InputController: NSTextView {
     /// open) can be detected without re-rendering on our own edits.
     private(set) var lastRenderedDocument: Document?
 
+    // MARK: Snippet completion (§9) — see InputController+Snippets.swift
+
+    /// The `@`-snippet completion list. Shown while the caret sits in an `@`-token
+    /// that has matching snippets; the controller owns selection and key handling.
+    let completionPopover = SnippetCompletionPopover()
+
+    /// The active completion's anchor: the model position of the `@` and its block.
+    /// `nil` when no completion session is open.
+    var completionSession: (anchorOffset: Int, blockID: BlockID)?
+
+    /// The snippet matches shown in the completion list, best-first.
+    var completionMatches: [Snippet] = []
+
+    /// The highlighted row in the completion list.
+    var completionSelection = 0
+
     // MARK: Intercepted editing actions
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
         guard let model = buffer, let caret = caretModelPosition(), !text.isEmpty else { return }
 
+        // Typing below the last block (caret clamped from the empty area beneath a
+        // non-empty last paragraph) starts a fresh paragraph rather than appending,
+        // so there is always a new line to begin in.
+        if layout.isPastDocumentEnd(selectedRange().location), blockHasText(model.document, caret.blockID) {
+            model.apply(.splitParagraph(blockID: caret.blockID, offset: caret.offset))
+            let doc = model.document
+            if let index = doc.blocks.firstIndex(where: { $0.id == caret.blockID }), index + 1 < doc.blocks.count {
+                let newBlock = doc.blocks[index + 1].id
+                model.apply(.insertText(text, blockID: newBlock, offset: 0))
+                renderFromModel(caret: (newBlock, text.count))
+                refreshCompletion()
+                return
+            }
+        }
+
         model.apply(.insertText(text, blockID: caret.blockID, offset: caret.offset))
         renderFromModel(caret: (caret.blockID, caret.offset + text.count))
+        refreshCompletion()
+    }
+
+    /// Whether the paragraph block `blockID` carries any non-empty run text. A
+    /// non-paragraph block (e.g. a clamped scene break) counts as having text so a
+    /// fresh paragraph is started rather than typing into it.
+    private func blockHasText(_ doc: Document, _ blockID: BlockID) -> Bool {
+        guard let block = doc.blocks.first(where: { $0.id == blockID }),
+              case .paragraph(let runs) = block.content else { return true }
+        return runs.contains { !$0.text.isEmpty }
     }
 
     override func insertNewline(_ sender: Any?) {
@@ -65,6 +106,7 @@ final class InputController: NSTextView {
         if caret.offset > 0 {
             model.apply(.deleteBackward(blockID: caret.blockID, offset: caret.offset))
             renderFromModel(caret: (caret.blockID, caret.offset - 1))
+            refreshCompletion()
             return
         }
 
@@ -84,6 +126,9 @@ final class InputController: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
+        // Completion navigation (arrows/return/tab/esc) wins while the list is up.
+        if completionPopover.isShown, handleCompletionKey(event) { return }
+
         if event.modifierFlags.contains(.command) {
             switch event.charactersIgnoringModifiers {
             case "i": toggleItalicAtSelection(); return
@@ -91,6 +136,12 @@ final class InputController: NSTextView {
             }
         }
         super.keyDown(with: event)   // routes typing to insertText/insertNewline/deleteBackward
+    }
+
+    /// A click moves the caret out of any active `@`-token; dismiss the list.
+    override func mouseDown(with event: NSEvent) {
+        endCompletion()
+        super.mouseDown(with: event)
     }
 
     // MARK: Commands
@@ -145,7 +196,9 @@ final class InputController: NSTextView {
 
     // MARK: Internals
 
-    private func caretModelPosition() -> (blockID: BlockID, offset: Int)? {
+    /// The caret's model position, or `nil` when it sits in non-editable
+    /// decoration. Visible module-wide so the reference extension can read it.
+    func caretModelPosition() -> (blockID: BlockID, offset: Int)? {
         layout.modelPosition(forCharacterAt: selectedRange().location)
     }
 
