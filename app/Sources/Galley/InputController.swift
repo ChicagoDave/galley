@@ -51,6 +51,22 @@ final class InputController: NSTextView {
     /// The highlighted row in the completion list.
     var completionSelection = 0
 
+    // MARK: Block palette (BP2) — see InputController+Palette.swift
+
+    /// The Cmd-; block palette. Shown while the writer is choosing a block to
+    /// insert; the controller owns selection and key handling.
+    let palettePopover = BlockPalettePopover()
+
+    /// The rows shown in the open palette, or empty when no palette is open.
+    var paletteItems: [BlockPaletteItem] = []
+
+    /// The highlighted row in the palette.
+    var paletteSelection = 0
+
+    /// The block the chosen item is inserted after — the caret's block when the
+    /// palette was summoned. `nil` when no palette session is open.
+    var paletteAnchor: BlockID?
+
     // MARK: Intercepted editing actions
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
@@ -128,19 +144,23 @@ final class InputController: NSTextView {
     override func keyDown(with event: NSEvent) {
         // Completion navigation (arrows/return/tab/esc) wins while the list is up.
         if completionPopover.isShown, handleCompletionKey(event) { return }
+        // The palette captures the same navigation keys while it is open.
+        if palettePopover.isShown, handlePaletteKey(event) { return }
 
         if event.modifierFlags.contains(.command) {
             switch event.charactersIgnoringModifiers {
             case "i": toggleItalicAtSelection(); return
+            case ";": showBlockPalette(); return
             default: break
             }
         }
         super.keyDown(with: event)   // routes typing to insertText/insertNewline/deleteBackward
     }
 
-    /// A click moves the caret out of any active `@`-token; dismiss the list.
+    /// A click moves the caret out of any active `@`-token or palette; dismiss both.
     override func mouseDown(with event: NSEvent) {
         endCompletion()
+        endPalette()
         super.mouseDown(with: event)
     }
 

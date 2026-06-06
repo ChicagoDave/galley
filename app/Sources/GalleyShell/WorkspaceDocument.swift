@@ -50,6 +50,11 @@ public final class WorkspaceDocument {
     /// `snippets/` directory — the source for `@`-completion. Empty until saved.
     public private(set) var snippetIndex = SnippetIndex()
 
+    /// The reusable block templates for this buffer (BP1), indexed from the
+    /// package's `templates/` directory — the source for the Block Palette (BP2).
+    /// Empty for a never-saved buffer (no package on disk yet).
+    public private(set) var templateIndex = TemplateIndex()
+
     /// Creates a buffer. Defaults to a fresh blank document with no associated file.
     ///
     /// - Parameters:
@@ -107,8 +112,8 @@ public final class WorkspaceDocument {
         status = "Opened \(url.lastPathComponent) — \(loaded.blocks.count) block(s)."
     }
 
-    /// Rebuilds `bibleIndex` and `snippetIndex` from the package's `bible/` and
-    /// `snippets/` directories (§9).
+    /// Rebuilds `bibleIndex`, `snippetIndex`, and `templateIndex` from the package's
+    /// `bible/`, `snippets/`, and `templates/` directories (§9, BP1).
     ///
     /// Called on load and after the first save; safe to call any time the writer may
     /// have added or edited reference files. A buffer with no `fileURL`, or a package
@@ -117,10 +122,12 @@ public final class WorkspaceDocument {
         guard let url = fileURL else {
             bibleIndex = BibleIndex()
             snippetIndex = SnippetIndex()
+            templateIndex = TemplateIndex()
             return
         }
         bibleIndex = BibleIndex.load(directory: url.appendingPathComponent("bible", isDirectory: true))
         snippetIndex = SnippetIndex.load(directory: url.appendingPathComponent("snippets", isDirectory: true))
+        templateIndex = TemplateIndex.load(directory: url.appendingPathComponent("templates", isDirectory: true))
     }
 
     /// Writes this buffer to `url` via `DocumentBundle`, recording `fileURL` and

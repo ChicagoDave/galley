@@ -42,4 +42,10 @@ public enum InputEvent: Equatable, Sendable {
 
     /// Toggle a paragraph to/from a set-piece of `kind` (the verse toggle, §8).
     case toggleSetPiece(blockID: BlockID, kind: SetPieceKind)
+
+    /// Insert a pre-composed block — content plus presentation overrides —
+    /// immediately after `afterBlockID`, minting a fresh identity (the Block
+    /// Palette's template insertion, BP2). The inserted block is fully editable
+    /// from the moment it lands; the caret is moved to it by the view layer.
+    case insertBlock(content: BlockContent, overrides: [PresentationOverride], afterBlockID: BlockID)
 }

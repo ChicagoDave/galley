@@ -28,6 +28,8 @@ enum Attribution {
     private static let firstLineIndent: CGFloat = 24
     private static let paragraphSpacing: CGFloat = 8
     private static let blockSpacing: CGFloat = 16
+    /// Margin inset applied to both edges of a `blockQuote` paragraph.
+    private static let blockQuoteIndent: CGFloat = 36
 
     private static var bodyFont: NSFont {
         NSFont(name: "Georgia", size: bodySize) ?? NSFont.systemFont(ofSize: bodySize)
@@ -62,13 +64,26 @@ enum Attribution {
     // MARK: Block renderers
 
     /// A body paragraph: serif body font, first-line indent, leading alignment
-    /// unless an override says otherwise.
+    /// unless an override says otherwise. A `blockQuote` override sets the block
+    /// off with a symmetric margin inset and no first-line indent.
     private static func bodyParagraph(_ spans: [DisplaySpan], overrides: [PresentationOverride]) -> NSAttributedString {
-        let style = paragraphStyle(
-            alignment: alignment(from: overrides) ?? .natural,
-            firstLineIndent: alignment(from: overrides) == nil ? firstLineIndent : 0,
-            spacingAfter: paragraphSpacing
-        )
+        let explicitAlignment = alignment(from: overrides)
+        let style: NSParagraphStyle
+        if hasBlockQuote(overrides) {
+            style = paragraphStyle(
+                alignment: explicitAlignment ?? .natural,
+                firstLineIndent: blockQuoteIndent,
+                spacingAfter: paragraphSpacing,
+                headIndent: blockQuoteIndent,
+                tailIndent: -blockQuoteIndent
+            )
+        } else {
+            style = paragraphStyle(
+                alignment: explicitAlignment ?? .natural,
+                firstLineIndent: explicitAlignment == nil ? firstLineIndent : 0,
+                spacingAfter: paragraphSpacing
+            )
+        }
         return line(spans, baseFont: font(bodyFont, smallCaps: hasSmallCaps(overrides)), derivedItalic: false, style: style)
     }
 
@@ -169,15 +184,23 @@ enum Attribution {
         overrides.contains(.smallCaps)
     }
 
+    private static func hasBlockQuote(_ overrides: [PresentationOverride]) -> Bool {
+        overrides.contains(.blockQuote)
+    }
+
     private static func paragraphStyle(
         alignment: NSTextAlignment,
         firstLineIndent: CGFloat,
         spacingBefore: CGFloat = 0,
-        spacingAfter: CGFloat = 0
+        spacingAfter: CGFloat = 0,
+        headIndent: CGFloat = 0,
+        tailIndent: CGFloat = 0
     ) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = alignment
         style.firstLineHeadIndent = firstLineIndent
+        style.headIndent = headIndent
+        style.tailIndent = tailIndent
         style.paragraphSpacingBefore = spacingBefore
         style.paragraphSpacing = spacingAfter
         style.lineHeightMultiple = 1.2

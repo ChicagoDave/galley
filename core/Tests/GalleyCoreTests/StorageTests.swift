@@ -237,6 +237,37 @@ func parseRejectsMalformedSidecar() {
     }
 }
 
+// MARK: - PresentationOverride wire codec (ADR-0009 amendment, BP1)
+
+@Test("the override wire codec round-trips every case, including blockQuote")
+func overrideTokenCodecIsExactInverse() {
+    let all: [PresentationOverride] = [
+        .alignment(.leading), .alignment(.center), .alignment(.trailing),
+        .smallCaps, .blockQuote,
+    ]
+    for override in all {
+        #expect(PresentationOverride(token: override.token) == override)
+    }
+    #expect(PresentationOverride(token: "blockQuote") == .blockQuote)
+    #expect(PresentationOverride(token: "blink") == nil)   // unknown token → nil, never a guess
+}
+
+@Test("round-trip: a blockQuote override on a block survives serialize → parse")
+func roundTripBlockQuoteOverride() throws {
+    var doc = Document()
+    let id = doc.mintBlockID()
+    doc.blocks = [Block(
+        id: id,
+        content: .paragraph(runs: [Run(text: "Here lie the keepers of the light.")]),
+        overrides: [.blockQuote]
+    )]
+    let (prose, sidecar) = serialize(doc)
+    #expect(sidecar.contains("blockQuote"))
+    let restored = try parse(proseText: prose, sidecar: sidecar)
+    #expect(restored == doc)
+    #expect(restored.blocks[0].overrides == [.blockQuote])
+}
+
 /// Builds a minimal valid sidecar JSON for the given blocks and counter.
 private func sidecarJSON(blocks: [(Int, [String])], nextBlockID: Int) -> String {
     let blockEntries = blocks.map { id, overrides in

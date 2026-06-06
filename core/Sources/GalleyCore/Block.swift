@@ -79,6 +79,50 @@ public enum PresentationOverride: Equatable, Hashable, Sendable {
 
     /// Render the block in small caps, e.g. a chapter-opener line (§14).
     case smallCaps
+
+    /// Render the block as a block quote: indented from the margin, leading
+    /// alignment — the common non-verse structural block (a set-off passage,
+    /// an inscription). Added under the ADR-0009 amendment (BP1) as a scoped,
+    /// closed addition, justified to the reveal as `[quote]`.
+    case blockQuote
+}
+
+// MARK: - Wire tokens (ADR-0009)
+
+extension PresentationOverride {
+
+    /// The wire token for this override — the single source of truth for both the
+    /// JSON sidecar (`Storage.swift`) and the template front-matter
+    /// (`GalleyShell.TemplateIndex`). Both readers share this codec so the closed
+    /// vocabulary can never drift between the two formats (rule 8b).
+    ///
+    /// - Invariant: every case maps to exactly one token, and `init?(token:)` is
+    ///   its exact inverse — `PresentationOverride(token: o.token) == o` for all `o`.
+    public var token: String {
+        switch self {
+        case .smallCaps: return "smallCaps"
+        case .blockQuote: return "blockQuote"
+        case .alignment(.leading): return "align:leading"
+        case .alignment(.center): return "align:center"
+        case .alignment(.trailing): return "align:trailing"
+        }
+    }
+
+    /// Decodes a wire token to its override, or `nil` if the token is outside the
+    /// closed vocabulary (ADR-0009). Callers turn `nil` into a hard rejection — an
+    /// unknown token is never silently dropped.
+    ///
+    /// - Parameter token: a sidecar or template-front-matter override token.
+    public init?(token: String) {
+        switch token {
+        case "smallCaps": self = .smallCaps
+        case "blockQuote": self = .blockQuote
+        case "align:leading": self = .alignment(.leading)
+        case "align:center": self = .alignment(.center)
+        case "align:trailing": self = .alignment(.trailing)
+        default: return nil
+        }
+    }
 }
 
 /// Horizontal alignment for a presentation override. Leading/center/trailing,

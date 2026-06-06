@@ -129,16 +129,10 @@ private func kindName(_ kind: SetPieceKind) -> String {
     }
 }
 
-/// Encodes a block's presentation overrides as sidecar tokens (ADR-0009).
+/// Encodes a block's presentation overrides as sidecar tokens (ADR-0009), via the
+/// shared `PresentationOverride` wire codec.
 private func encodeOverrides(_ overrides: [PresentationOverride]) -> [String] {
-    overrides.map { override in
-        switch override {
-        case .smallCaps: return "smallCaps"
-        case .alignment(.leading): return "align:leading"
-        case .alignment(.center): return "align:center"
-        case .alignment(.trailing): return "align:trailing"
-        }
-    }
+    overrides.map(\.token)
 }
 
 // MARK: - Parse
@@ -307,15 +301,13 @@ private func setPieceKind(_ token: String) -> SetPieceKind? {
     }
 }
 
-/// Decodes a sidecar override token back to a `PresentationOverride` (ADR-0009).
+/// Decodes a sidecar override token back to a `PresentationOverride` (ADR-0009),
+/// via the shared wire codec. An unknown token is a hard rejection, never skipped.
 private func decodeOverride(_ token: String) throws -> PresentationOverride {
-    switch token {
-    case "smallCaps": return .smallCaps
-    case "align:leading": return .alignment(.leading)
-    case "align:center": return .alignment(.center)
-    case "align:trailing": return .alignment(.trailing)
-    default: throw ParseError.unknownOverrideToken(token)
+    guard let override = PresentationOverride(token: token) else {
+        throw ParseError.unknownOverrideToken(token)
     }
+    return override
 }
 
 // MARK: - Sidecar DTO

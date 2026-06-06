@@ -36,6 +36,8 @@ public func applyInput(_ event: InputEvent, to doc: Document) -> Document {
         makeSceneBreak(blockID: blockID, in: &doc)
     case let .toggleSetPiece(blockID, kind):
         toggleSetPiece(blockID: blockID, kind: kind, in: &doc)
+    case let .insertBlock(content, overrides, afterBlockID):
+        insertBlock(content: content, overrides: overrides, afterBlockID: afterBlockID, in: &doc)
     }
     return doc
 }
@@ -65,6 +67,19 @@ private func insertText(_ raw: String, blockID: BlockID, offset: Int, in doc: in
     if delta != 0 {
         doc.adjustCutOffset(blockID: blockID, at: removeFrom, delta: delta)
     }
+}
+
+// MARK: - Insert block (Block Palette, BP2)
+
+/// Inserts a pre-composed block immediately after `afterBlockID`, minting a fresh
+/// identity (ADR-0010). A no-op if `afterBlockID` names no block, so a stale
+/// palette event can never crash editing (the reducer's total contract). Cuts are
+/// untouched — the new block carries a never-before-seen ID that no cut anchors to,
+/// and inserting after an existing anchor never shifts another block's offsets.
+private func insertBlock(content: BlockContent, overrides: [PresentationOverride], afterBlockID: BlockID, in doc: inout Document) {
+    guard let i = doc.blocks.firstIndex(where: { $0.id == afterBlockID }) else { return }
+    let newID = doc.mintBlockID()
+    doc.blocks.insert(Block(id: newID, content: content, overrides: overrides), at: i + 1)
 }
 
 // MARK: - Delete
