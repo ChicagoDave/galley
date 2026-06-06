@@ -1,8 +1,8 @@
 # Session Plan: macOS Editor Shell (Build Step 2)
 
 **Created**: 2026-06-05
-**Overall scope**: Build the Mac-only editor shell that sits on top of the complete, headless `UntitledCore` library — covering the SwiftUI/AppKit app target, `displayProjection`, typing-simplicity input rules, the reveal pane with chapter-slicing, the reference system (peek + @-bible), and chapter-opener templates. All new code lives in a new app target; `UntitledCore` is imported, never modified to accept UI types (ADR-0002, rule 8).
-**Bounded contexts touched**: N/A — infrastructure/app-layer work. The domain model is complete in `UntitledCore`; this build step is a rendering and input layer over it.
+**Overall scope**: Build the Mac-only editor shell that sits on top of the complete, headless `GalleyCore` library — covering the SwiftUI/AppKit app target, `displayProjection`, typing-simplicity input rules, the reveal pane with chapter-slicing, the reference system (peek + @-bible), and chapter-opener templates. All new code lives in a new app target; `GalleyCore` is imported, never modified to accept UI types (ADR-0002, rule 8).
+**Bounded contexts touched**: N/A — infrastructure/app-layer work. The domain model is complete in `GalleyCore`; this build step is a rendering and input layer over it.
 **Key domain language**: displayProjection, RevealToken, ChapterCut, TypingRule, BibleEntry, PeekOverlay, TemplateRef
 
 ---
@@ -12,17 +12,17 @@
 ### Phase 1: App target scaffold + open/save file pair
 - **Tier**: Small
 - **Budget**: 100 tool calls
-- **Domain focus**: Infrastructure prerequisite for all UI phases — establishes the macOS app target, its dependency on `UntitledCore`, and round-trip file I/O through the core's `parse`/`serialize` surface.
+- **Domain focus**: Infrastructure prerequisite for all UI phases — establishes the macOS app target, its dependency on `GalleyCore`, and round-trip file I/O through the core's `parse`/`serialize` surface.
 - **Entry state**: Build step 1 complete and committed at `83276c2`. `swift build` and `swift test` pass in `core/` (48 tests GREEN). No app target exists in the repo. Working environment is macOS with Swift 6.3; AppKit/SwiftUI are available.
 - **Deliverable**:
-  - A new SwiftPM executable target (e.g. `UntitledApp` or an `app/` directory with its own `Package.swift` or as a new target in `core/Package.swift`) that declares a dependency on the local `UntitledCore` package.
+  - A new SwiftPM executable target (e.g. `Galley` or an `app/` directory with its own `Package.swift` or as a new target in `core/Package.swift`) that declares a dependency on the local `GalleyCore` package.
   - A minimal SwiftUI `App` struct that opens on launch — a single window, plain white, no editing yet.
-  - `DocumentModel`: a thin `@Observable` (or `ObservableObject`) wrapper holding a `Document` value; opened/saved via `UntitledCore.parse` and `UntitledCore.serialize`. Wire to `NSOpenPanel`/`NSSavePanel` so the user can open a `.untitled` prose+sidecar pair and save it back.
-  - The dependency boundary is enforced: `UntitledCore` imports only `Foundation`; the app target imports `SwiftUI`/`AppKit`. No AppKit type leaks into `UntitledCore`.
+  - `DocumentModel`: a thin `@Observable` (or `ObservableObject`) wrapper holding a `Document` value; opened/saved via `GalleyCore.parse` and `GalleyCore.serialize`. Wire to `NSOpenPanel`/`NSSavePanel` so the user can open a `.galley` prose+sidecar pair and save it back.
+  - The dependency boundary is enforced: `GalleyCore` imports only `Foundation`; the app target imports `SwiftUI`/`AppKit`. No AppKit type leaks into `GalleyCore`.
   - ADR-worthy decision: **app-target structure** — separate SwiftPM package vs. additional target in `core/Package.swift`; record the choice and rationale.
-  - Smoke-check verification: launch the app, open a test `.untitled` file created by the core tests, close, re-open — document content survives the round-trip.
-- **Exit state**: `swift build` succeeds for the app target with zero warnings. The app launches, opens a file, and saves it without data loss. The `UntitledCore` target has no new AppKit imports. Committed.
-- **Status**: COMPLETE — separate SwiftPM package `app/` (ADR-0011): `UntitledShell` library (`DocumentBundle` file-pair I/O) + `UntitledApp` `@main` SwiftUI executable (`DocumentModel` open/save via `NSOpenPanel`/`NSSavePanel`, `ContentView`). `.untitled` bundle = directory of `prose.txt` + `sidecar.json` (ADR-0007). `swift build` clean (0 warnings); 4 real-path round-trip tests GREEN; app launches (run loop alive, no crash). Core unchanged — no new AppKit imports. (session 6baa7e, 2026-06-05)
+  - Smoke-check verification: launch the app, open a test `.galley` file created by the core tests, close, re-open — document content survives the round-trip.
+- **Exit state**: `swift build` succeeds for the app target with zero warnings. The app launches, opens a file, and saves it without data loss. The `GalleyCore` target has no new AppKit imports. Committed.
+- **Status**: COMPLETE — separate SwiftPM package `app/` (ADR-0011): `GalleyShell` library (`DocumentBundle` file-pair I/O) + `Galley` `@main` SwiftUI executable (`DocumentModel` open/save via `NSOpenPanel`/`NSSavePanel`, `ContentView`). `.galley` bundle = directory of `prose.txt` + `sidecar.json` (ADR-0007). `swift build` clean (0 warnings); 4 real-path round-trip tests GREEN; app launches (run loop alive, no crash). Core unchanged — no new AppKit imports. (session 6baa7e, 2026-06-05)
 
 ---
 
@@ -33,16 +33,16 @@
 - **Entry state**: Phase 1 exit state — app target builds and launches.
 - **Deliverable**:
   - **Design decision (ADR-worthy):** Resolve where `displayProjection` lives.
-    - Option A: `UntitledCore` emits a `[DisplayToken]` enum (plain values, no AppKit) — same pattern as `RevealToken`. The shell converts tokens to `NSAttributedString` in a separate attribution step.
+    - Option A: `GalleyCore` emits a `[DisplayToken]` enum (plain values, no AppKit) — same pattern as `RevealToken`. The shell converts tokens to `NSAttributedString` in a separate attribution step.
     - Option B: `displayProjection` lives entirely in the shell, returns `NSAttributedString` directly.
     - Recommendation for the planner: Option A keeps the core testable headlessly and consistent with `revealProjection`'s pattern (ADR-0004, ADR-0006 both say "two pure render functions"). **Assume Option A unless the user corrects this.** State the assumption explicitly in the ADR.
-  - If Option A: `DisplayToken` enum and `displayProjection(_ doc: Document) -> [DisplayToken]` added to `UntitledCore`, with no AppKit imports. Behavioral tests for `displayProjection` in `UntitledCoreTests` — asserting on token sequence for each block type (paragraph typography, scene break, set-piece centering/italic, presentation overrides, chapter cut splice points).
+  - If Option A: `DisplayToken` enum and `displayProjection(_ doc: Document) -> [DisplayToken]` added to `GalleyCore`, with no AppKit imports. Behavioral tests for `displayProjection` in `GalleyCoreTests` — asserting on token sequence for each block type (paragraph typography, scene break, set-piece centering/italic, presentation overrides, chapter cut splice points).
   - An `Attribution` module in the shell that maps `[DisplayToken]` → `NSAttributedString`, applying the closed typographic vocabulary (paragraph indent, verse centering, italic, scene-break ornament). This module is AppKit-only and has no tests in the headless suite; it gets a launch smoke check (described below).
   - Integration Reality Statement produced before closing this phase: the Attribution module is an OWNED dependency of the shell; at least one real-path check (launch the app, open a document, confirm the paragraph/verse/scene-break rendering is visually correct) backs any stub used in development.
   - The `NSTextView` host (`NSViewRepresentable` wrapper per ADR-0003) is scaffolded and wired to `DocumentModel`, displaying the `NSAttributedString` from `Attribution`. Editing is not yet wired — the text view is read-display-only at this phase exit.
   - Smoke-check verification: launch the app, open a document with paragraphs, a scene break, and a verse block; confirm the three block types render distinctly and correctly (centered italic verse, `* * *` ornament, indented paragraph).
-- **Exit state**: `UntitledCore` test suite remains at 48+ GREEN (no regressions; new `displayProjection` tests added). App launches and renders a document visually correctly. `displayProjection` design decision recorded as ADR. Committed.
-- **Status**: COMPLETE — Option A chosen (ADR-0012): `DisplayToken`/`DisplaySpan` + `Document.displayProjection()` in `UntitledCore` (pure values, chapter-cut splicing incl. mid-paragraph offset splits with italic preserved); 11 behavioral tests added (core now 59 GREEN, 0 warnings). Shell: `Attribution` ([DisplayToken]→NSAttributedString, the closed typographic vocabulary) + `DocumentTextView` (read-only TextKit 2 `NSTextView` via `NSViewRepresentable`, ADR-0003) wired into `ContentView`. App builds clean and launches; sample bundle rendered for manual visual check. (session 6baa7e, 2026-06-05)
+- **Exit state**: `GalleyCore` test suite remains at 48+ GREEN (no regressions; new `displayProjection` tests added). App launches and renders a document visually correctly. `displayProjection` design decision recorded as ADR. Committed.
+- **Status**: COMPLETE — Option A chosen (ADR-0012): `DisplayToken`/`DisplaySpan` + `Document.displayProjection()` in `GalleyCore` (pure values, chapter-cut splicing incl. mid-paragraph offset splits with italic preserved); 11 behavioral tests added (core now 59 GREEN, 0 warnings). Shell: `Attribution` ([DisplayToken]→NSAttributedString, the closed typographic vocabulary) + `DocumentTextView` (read-only TextKit 2 `NSTextView` via `NSViewRepresentable`, ADR-0003) wired into `ContentView`. App builds clean and launches; sample bundle rendered for manual visual check. (session 6baa7e, 2026-06-05)
 
 ---
 
@@ -98,11 +98,11 @@
 - **Domain focus**: The mechanical reference lookup system — a fuzzy index over the writer's own bible files, surfaced via a peek overlay and `@`-completion inline. No AI, no generation (ADR-0008).
 - **Entry state**: Phase 4 exit state — the full editing + reveal surface is working. No reference system exists.
 - **Deliverable**:
-  - **Bible index**: a `BibleIndex` struct (in the app layer, not `UntitledCore` — it reads files from disk and owns the fuzzy-search logic) that loads bible entries (YAML front-matter + notes, one file per entity) from a configurable directory alongside the prose file. Builds an in-memory fuzzy index (simple prefix/substring match sufficient for v1; no external dependency required unless the planner decides otherwise).
+  - **Bible index**: a `BibleIndex` struct (in the app layer, not `GalleyCore` — it reads files from disk and owns the fuzzy-search logic) that loads bible entries (YAML front-matter + notes, one file per entity) from a configurable directory alongside the prose file. Builds an in-memory fuzzy index (simple prefix/substring match sufficient for v1; no external dependency required unless the planner decides otherwise).
   - **`@`-completion**: intercept `@` (or `[[`) in the `InputController`; present a `NSMenu`-style or custom completion popover listing matching bible entries. `Enter` inserts the canonical entry name into the run text. `Tab` opens the peek overlay for that entry.
   - **Peek overlay**: an `NSPopover` (or overlay child window) that displays a bible entry's full text in read-only form. Dismisses on `Esc` or focus loss; cursor position is unchanged. A "flick-to-last" keybinding re-summons the last peeked entry.
-  - **Scene-remembers-its-references**: each scene (contiguous block range before the next `ChapterCut`) quietly records which bible entries were peeked while editing it. Stored in `Document.meta` or a lightweight parallel structure (design decision: record in `Metadata` in the core model or as a separate app-layer annotation). Assumption: store in app-layer annotation to avoid making `UntitledCore` aware of bible files; state this explicitly.
-  - ADR-worthy decision: **bible index location** — does `BibleIndex` live in `UntitledCore` (pure value, portable) or in the app layer (has file I/O)? Recommendation: app layer, because file I/O belongs outside the pure domain core. Record the decision.
+  - **Scene-remembers-its-references**: each scene (contiguous block range before the next `ChapterCut`) quietly records which bible entries were peeked while editing it. Stored in `Document.meta` or a lightweight parallel structure (design decision: record in `Metadata` in the core model or as a separate app-layer annotation). Assumption: store in app-layer annotation to avoid making `GalleyCore` aware of bible files; state this explicitly.
+  - ADR-worthy decision: **bible index location** — does `BibleIndex` live in `GalleyCore` (pure value, portable) or in the app layer (has file I/O)? Recommendation: app layer, because file I/O belongs outside the pure domain core. Record the decision.
   - Behavioral tests: `BibleIndex` fuzzy matching logic is AppKit-free and fully testable headlessly. The popover/completion UI gets a manual smoke check.
   - Smoke-check verification: create a bible file, launch the app, type `@`, confirm matching entries appear. `Tab` on a result opens the peek overlay with the entry content. `Esc` returns cursor to position. Flick-to-last re-summons it.
 - **Exit state**: `@`-completion and peek overlay work with a real bible directory. `BibleIndex` tests GREEN. Committed.
@@ -120,7 +120,7 @@
   - **Template assignment UI**: in chapter-edit mode (reveal pane), a contextual control on a `[Chapter]` chip lets the writer assign or clear a template for that cut.
   - **Template instantiation at render time**: `displayProjection` (or a separate `chapterOpenProjection`) inserts the template's blocks between the chapter-break splice and the first prose block of the new chapter. This is a pure transform over the model — no new storage. Assumption: template instantiation is computed at render time by `displayProjection`; it is not injected into `Document.blocks`. State this explicitly.
   - **Template editor**: a minimal UI (separate sheet or popover) to create/edit/delete named templates — essentially a small block editor using the same typing rules.
-  - ADR-worthy decision: **template storage location** — in the sidecar (extending the existing JSON schema) vs. a separate `.untitled-templates` file. Record the choice.
+  - ADR-worthy decision: **template storage location** — in the sidecar (extending the existing JSON schema) vs. a separate `.galley-templates` file. Record the choice.
   - Behavioral tests: template instantiation logic (given a `Document` with cuts and `TemplateRef`s, assert the display token sequence contains the template blocks in the right positions) is testable headlessly. The assignment/editor UI gets a smoke check.
   - Smoke-check verification: create a template with an epigraph block, assign it to a chapter cut in the reveal pane, toggle reveal off — confirm the template blocks appear at the chapter boundary in the display view.
 - **Exit state**: Templates are assignable to cuts, persist in the file pair, and render at chapter boundaries. Build step 2 is complete. All headless tests GREEN. Committed.

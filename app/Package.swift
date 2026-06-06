@@ -1,40 +1,40 @@
 // swift-tools-version:6.2
 //
-// Package manifest for the Untitled macOS editor shell (overview §13, step 2;
-// ADR-0001/0002/0003). The shell CONSUMES the headless `UntitledCore` package
+// Package manifest for the Galley macOS editor shell (overview §13, step 2;
+// ADR-0001/0002/0003). The shell CONSUMES the headless `GalleyCore` package
 // and never modifies it to accept UI types — dependencies flow inward only.
 //
 // Targets:
-//   - `UntitledShell` (library): pure Foundation + UntitledCore file-pair I/O —
+//   - `GalleyShell` (library): pure Foundation + GalleyCore file-pair I/O —
 //     no AppKit, fully testable headlessly.
-//   - `UntitledApp` (executable): the `@main` SwiftUI/AppKit shell.
-//   - `UntitledShellTests` (test): real-path round-trip tests for the file layer.
+//   - `Galley` (executable): the `@main` SwiftUI/AppKit shell.
+//   - `GalleyShellTests` (test): real-path round-trip tests for the file layer.
 
 import PackageDescription
 
 let package = Package(
-    name: "UntitledApp",
+    name: "Galley",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(path: "../core"),
     ],
     targets: [
         .target(
-            name: "UntitledShell",
-            dependencies: [.product(name: "UntitledCore", package: "core")]
+            name: "GalleyShell",
+            dependencies: [.product(name: "GalleyCore", package: "core")]
         ),
         .executableTarget(
-            name: "UntitledApp",
+            name: "Galley",
             dependencies: [
-                "UntitledShell",
-                .product(name: "UntitledCore", package: "core"),
+                "GalleyShell",
+                .product(name: "GalleyCore", package: "core"),
             ]
         ),
         .testTarget(
-            name: "UntitledShellTests",
+            name: "GalleyShellTests",
             dependencies: [
-                "UntitledShell",
-                .product(name: "UntitledCore", package: "core"),
+                "GalleyShell",
+                .product(name: "GalleyCore", package: "core"),
             ]
         ),
     ]

@@ -1,4 +1,4 @@
-# Technical Design — Untitled
+# Technical Design — Galley
 
 > *Named for the state every manuscript starts in.*
 
@@ -246,7 +246,7 @@ The constraint: reference must be a **peek, not a navigation.** The lookup is ch
 
 The writer owns the file. The on-disk format is **plain text — a Fountain-for-prose syntax** — parsed into the model on load and serialized back on save.
 
-- **Prose file** (`.untitled` / `.md`-ish): continuous prose, scene breaks as `#`/`***`, italic as `_…_`, set-pieces fenced (e.g. `:::verse … :::`). Chapters do **not** appear here — the prose stays continuous and re-sliceable.
+- **Prose file** (`.galley` / `.md`-ish): continuous prose, scene breaks as `#`/`***`, italic as `_…_`, set-pieces fenced (e.g. `:::verse … :::`). Chapters do **not** appear here — the prose stays continuous and re-sliceable.
 - **Chapter sidecar**: cut-points (positions, titles, opener refs) stored alongside, consistent with "text is primary, chapters are annotation." Reslicing never touches the prose.
 - **Bible**: one structured file per entity (YAML front-matter + notes), indexed in memory for `@`-complete.
 
