@@ -20,12 +20,14 @@ import GalleyShell
 @main
 struct Galley: App {
 
-    /// Forces foreground-app behaviour when launched via `swift run` (see
-    /// `AppDelegate`).
+    /// Forces foreground-app behaviour and routes Launch Services open-document
+    /// events into the workspace (see `AppDelegate`).
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
-    /// The window's workspace — the open buffers and the current one.
-    @State private var workspace = WorkspaceModel()
+    /// The window's workspace — the open buffers and the current one. Shared with
+    /// the delegate so a Finder double-click and the scene act on one store
+    /// (`AppWorkspace`, ADR-0018).
+    @State private var workspace = AppWorkspace.shared
 
     var body: some Scene {
         WindowGroup("Galley") {
@@ -83,25 +85,5 @@ struct Galley: App {
         if !title.isEmpty { return title }
         if let name = buffer.fileURL?.deletingPathExtension().lastPathComponent { return name }
         return "Untitled \(index + 1)"
-    }
-}
-
-/// Makes the SwiftPM-launched executable behave as a regular foreground app.
-///
-/// A bare SwiftPM executable launches without an activation policy, so its window
-/// neither appears in the Dock nor comes to the front. Setting `.regular` and
-/// activating on launch gives the expected app behaviour during `swift run`,
-/// without needing an Xcode app bundle in Phase 1.
-final class AppDelegate: NSObject, NSApplicationDelegate {
-
-    /// Promotes the process to a regular foreground app and brings it forward.
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    /// Quits when the last window closes — expected single-window behaviour.
-    func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool {
-        true
     }
 }

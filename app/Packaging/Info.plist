@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist — the source-of-truth property list for Galley.app (ADR-0017).
+
+  This template is copied verbatim to Galley.app/Contents/Info.plist by
+  scripts/bundle.sh. It lives under app/Packaging/ (not app/Sources/Galley/)
+  so SwiftPM never sees it as an unhandled target resource and the
+  swift build / test spine (ADR-0011) stays clean.
+
+  Phase B1 establishes the launchable-app keys plus a scaffold document-type
+  entry. Phase B2 completes the .galley package registration: it promotes the
+  exported type to conform to com.apple.package, sets LSTypeIsPackage, and wires
+  LSItemContentTypes so Finder presents a .galley directory as a single file.
+  The on-disk .galley layout (prose.txt + sidecar.json) is unaffected (ADR-0007).
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.galley.Galley</string>
+	<key>CFBundleName</key>
+	<string>Galley</string>
+	<key>CFBundleDisplayName</key>
+	<string>Galley</string>
+	<key>CFBundleExecutable</key>
+	<string>Galley</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+
+	<!-- The .galley document type, owned by Galley, addressed by the exported UTI
+	     below. LSTypeIsPackage tells Launch Services a .galley directory is a
+	     package — Finder presents it as a single opaque file (ADR-0019). -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Galley Project</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.galley.project</string>
+			</array>
+			<key>LSTypeIsPackage</key>
+			<true/>
+		</dict>
+	</array>
+
+	<!-- Exported UTI for the .galley package. Conformance to com.apple.package is
+	     the mechanism that makes Finder treat any .galley directory as one file;
+	     public.composite-content marks it as a document made of other content.
+	     The on-disk layout (prose.txt + sidecar.json) is unchanged — ADR-0007 is
+	     complemented, not superseded (ADR-0019). -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.galley.project</string>
+			<key>UTTypeDescription</key>
+			<string>Galley Project</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+				<string>public.composite-content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>galley</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

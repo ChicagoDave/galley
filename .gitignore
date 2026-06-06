@@ -12,3 +12,6 @@ DerivedData/
 *.o
 *.d
 .build/
+
+# Assembled app bundle (scripts/bundle.sh output)
+/dist/
