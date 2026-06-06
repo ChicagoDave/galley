@@ -9,7 +9,8 @@
 //  `Galley` executable and call in with already-chosen URLs and indices, so the
 //  store stays AppKit-free and headlessly testable (ADR-0011, fix (a)).
 //  Public interface: `WorkspaceModel`, its observable `documents` / `currentIndex`
-//  state, `current`, `new()`, `open(url:)`, `switchTo(index:)`.
+//  state, `current`, `new()`, `open(url:)`, `switchTo(index:)`, `close(index:)`,
+//  `discardAndClose(index:)`, `pendingCloseIndex`, and `CloseOutcome`.
 //  Owner context: GalleyShell — app-layer window/navigation state. Foundation +
 //  GalleyCore (transitively, via `WorkspaceDocument`) + Observation only; no
 //  AppKit/SwiftUI.
@@ -17,6 +18,18 @@
 
 import Foundation
 import Observation
+
+/// The result of attempting to close a buffer.
+public enum CloseOutcome: Equatable {
+
+    /// The buffer was closed (after being persisted first, if it was file-backed).
+    case closed
+
+    /// The buffer has unsaved content and was left open: the caller must resolve it
+    /// (save or discard) before it can be closed. Carries the buffer's index so the
+    /// executable can prompt and then call back.
+    case needsConfirmation(index: Int)
+}
 
 /// Observable state for one window's set of open document buffers.
 ///
@@ -36,6 +49,13 @@ public final class WorkspaceModel {
 
     /// The index of the buffer currently shown in the window. Always in range.
     public private(set) var currentIndex: Int
+
+    /// View-coordination state: the index of a buffer whose close is awaiting a
+    /// save/discard decision, or `nil`. Set by the executable when `close` returns
+    /// `.needsConfirmation`; the executable presents the sheet and then calls
+    /// `close`/`discardAndClose` and clears this. Plain `Int?` state — it carries no
+    /// AppKit and does not affect headless testability.
+    public var pendingCloseIndex: Int?
 
     /// Creates a workspace with a single blank buffer — the launch state.
     public init() {
@@ -92,6 +112,67 @@ public final class WorkspaceModel {
         guard documents.indices.contains(index) else { return }
         autosaveCurrentIfPersisted()
         currentIndex = index
+    }
+
+    /// Closes the buffer at `index`.
+    ///
+    /// A file-backed buffer is persisted, then removed. An unsaved but empty blank is
+    /// removed silently. An unsaved buffer that has content is left untouched and the
+    /// caller is asked to confirm (ADR-0015). Removing the last buffer leaves a fresh
+    /// blank so the window always has a current buffer.
+    ///
+    /// - Parameter index: the slot to close.
+    /// - Returns: `.closed` if the buffer was removed; `.needsConfirmation(index:)`
+    ///   if it has unsaved content (the workspace is left unchanged); `.closed` for an
+    ///   out-of-range index (a no-op).
+    @discardableResult
+    public func close(index: Int) -> CloseOutcome {
+        guard documents.indices.contains(index) else { return .closed }
+        let target = documents[index]
+
+        if let url = target.fileURL {
+            target.persist(to: url)
+            removeBuffer(at: index)
+            return .closed
+        }
+        if target.hasContent {
+            return .needsConfirmation(index: index)
+        }
+        removeBuffer(at: index)
+        return .closed
+    }
+
+    /// Closes the buffer at `index` unconditionally, discarding any unsaved content.
+    ///
+    /// The explicit override behind the close prompt's "Discard" action. Same
+    /// last-buffer/neighbor handling as `close`.
+    ///
+    /// - Parameter index: the slot to close. Out-of-range is a no-op.
+    public func discardAndClose(index: Int) {
+        guard documents.indices.contains(index) else { return }
+        removeBuffer(at: index)
+    }
+
+    /// Removes the buffer at `index` and keeps `current` valid.
+    ///
+    /// Replaces the set with a fresh blank when the last buffer is removed, otherwise
+    /// adjusts `currentIndex`: it shifts left when an earlier buffer is removed, and
+    /// lands on the previous neighbour (preferring `index - 1`) when the current
+    /// buffer itself is removed.
+    private func removeBuffer(at index: Int) {
+        documents.remove(at: index)
+
+        if documents.isEmpty {
+            documents.append(WorkspaceDocument())
+            currentIndex = 0
+            return
+        }
+        if index < currentIndex {
+            currentIndex -= 1
+        } else if index == currentIndex {
+            currentIndex = min(max(index - 1, 0), documents.count - 1)
+        }
+        // index > currentIndex: the current buffer is unaffected and still in range.
     }
 
     /// Persists the current buffer if it is backed by a file, so switching away from

@@ -54,10 +54,27 @@ struct DocumentTextView: NSViewRepresentable {
         scrollView.documentView = textView
 
         textView.renderFromModel(caret: EditorLayout.build(from: buffer.document).firstEditablePosition())
+
+        // The view is not in a window yet; defer making it first responder so the
+        // editor accepts typing on launch without a click.
+        DispatchQueue.main.async { [weak textView] in
+            guard let textView else { return }
+            textView.window?.makeFirstResponder(textView)
+        }
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        (scrollView.documentView as? InputController)?.syncFromModelIfNeeded()
+        guard let controller = scrollView.documentView as? InputController else { return }
+
+        // Switching buffers swaps the bound document on the one persistent text view
+        // (keeping first-responder), and re-renders from the newly current buffer.
+        // Same buffer, just edited → fall through to the no-op-if-unchanged sync.
+        if controller.buffer !== buffer {
+            controller.buffer = buffer
+            controller.renderFromModel(caret: EditorLayout.build(from: buffer.document).firstEditablePosition())
+        } else {
+            controller.syncFromModelIfNeeded()
+        }
     }
 }

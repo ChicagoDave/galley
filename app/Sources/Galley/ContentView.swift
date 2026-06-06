@@ -47,7 +47,6 @@ struct ContentView: View {
                 }
 
                 DocumentTextView(buffer: current)
-                    .id(workspace.currentIndex)   // rebuild the editor per buffer slot
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if showReveal {
@@ -67,6 +66,10 @@ struct ContentView: View {
                 Button(showReveal ? "Hide Reveal" : "Reveal") { showReveal.toggle() }
                     .keyboardShortcut("/", modifiers: .command)
                 Spacer()
+                Text("Project \(workspace.currentIndex + 1) of \(workspace.documents.count)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
                 Text(current.status)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -78,5 +81,30 @@ struct ContentView: View {
         }
         .frame(minWidth: 700, minHeight: 480)
         .navigationTitle(projectTitle)   // drives the window's title bar
+        .confirmationDialog(
+            "Save changes before closing this project?",
+            isPresented: Binding(
+                get: { workspace.pendingCloseIndex != nil },
+                set: { presented in if !presented { workspace.pendingCloseIndex = nil } }
+            ),
+            presenting: workspace.pendingCloseIndex
+        ) { index in
+            Button("Save…") {
+                workspace.saveCurrentWithPanel()
+                // Only close if the save actually landed a file (panel not cancelled).
+                if workspace.documents.indices.contains(index),
+                   workspace.documents[index].fileURL != nil {
+                    workspace.close(index: index)
+                }
+                workspace.pendingCloseIndex = nil
+            }
+            Button("Discard", role: .destructive) {
+                workspace.discardAndClose(index: index)
+                workspace.pendingCloseIndex = nil
+            }
+            Button("Cancel", role: .cancel) {
+                workspace.pendingCloseIndex = nil
+            }
+        }
     }
 }

@@ -42,7 +42,47 @@ struct Galley: App {
                 Button("Save…") { workspace.saveCurrentWithPanel() }
                     .keyboardShortcut("s", modifiers: .command)
             }
+            CommandGroup(after: .saveItem) {
+                Button("Close") {
+                    if case .needsConfirmation(let index) = workspace.close(index: workspace.currentIndex) {
+                        workspace.pendingCloseIndex = index
+                    }
+                }
+                .keyboardShortcut("w", modifiers: .command)
+            }
+            CommandMenu("Projects") {
+                ForEach(Array(workspace.documents.enumerated()), id: \.offset) { pair in
+                    projectMenuItem(index: pair.offset, buffer: pair.element)
+                }
+            }
         }
+    }
+
+    /// One row in the Projects menu: a checkmarked toggle that switches to the buffer
+    /// at `index`, with a Cmd-1…Cmd-9 shortcut for the first nine slots.
+    @ViewBuilder
+    private func projectMenuItem(index: Int, buffer: WorkspaceDocument) -> some View {
+        let toggle = Toggle(
+            Galley.projectTitle(for: buffer, index: index),
+            isOn: Binding(
+                get: { workspace.currentIndex == index },
+                set: { _ in workspace.switchTo(index: index) }
+            )
+        )
+        if index < 9 {
+            toggle.keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+        } else {
+            toggle
+        }
+    }
+
+    /// A display title for a buffer: the document title, else its file name, else a
+    /// numbered placeholder for an unsaved blank.
+    static func projectTitle(for buffer: WorkspaceDocument, index: Int) -> String {
+        let title = buffer.document.meta.title
+        if !title.isEmpty { return title }
+        if let name = buffer.fileURL?.deletingPathExtension().lastPathComponent { return name }
+        return "Untitled \(index + 1)"
     }
 }
 

@@ -171,6 +171,141 @@ struct WorkspaceModelTests {
         #expect(buffer.hasContent)
     }
 
+    // MARK: close(index:) DOES
+
+    /// close DOES persist a file-backed buffer before removing it, and lands the
+    /// current index on the previous neighbour. Asserts the edit reached disk.
+    @Test func closePersistsAndRemovesFileBackedBuffer() throws {
+        let url = try writeBundle(makeDocument(text: "kept"))
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let ws = WorkspaceModel()           // slot 0: blank
+        #expect(ws.open(url: url))          // slot 1: file-backed, current == 1
+        ws.current.apply(.insertText("!", blockID: 0, offset: 4))
+
+        let outcome = ws.close(index: 1)
+
+        #expect(outcome == .closed)
+        #expect(ws.documents.count == 1)
+        #expect(ws.currentIndex == 0)
+        let onDisk = try DocumentBundle.read(from: url)
+        if case .paragraph(let runs) = onDisk.blocks[0].content {
+            #expect(runs.map(\.text).joined() == "kept!")   // persisted on close
+        } else {
+            Issue.record("expected a paragraph block on disk")
+        }
+    }
+
+    /// close DOES remove an unsaved but empty blank silently (no confirmation).
+    @Test func closeRemovesEmptyBlankSilently() {
+        let ws = WorkspaceModel()
+        ws.new()                            // two blanks, current == 1
+
+        let outcome = ws.close(index: 1)
+
+        #expect(outcome == .closed)
+        #expect(ws.documents.count == 1)
+        #expect(ws.currentIndex == 0)
+    }
+
+    /// close of the current buffer in the middle lands on the previous neighbour.
+    @Test func closeCurrentLandsOnPreviousNeighbour() {
+        let ws = WorkspaceModel()
+        ws.new()
+        ws.new()                            // three blanks, current == 2
+        ws.switchTo(index: 1)               // current == 1 (the middle)
+
+        ws.close(index: 1)
+
+        #expect(ws.documents.count == 2)
+        #expect(ws.currentIndex == 0)       // index - 1
+    }
+
+    /// close of the current buffer at slot 0 clamps the neighbour index to 0 (the
+    /// `max(index - 1, 0)` guard) rather than going negative.
+    @Test func closeCurrentSlotZeroClampsToZero() {
+        let ws = WorkspaceModel()
+        ws.new()                            // current == 1
+        ws.switchTo(index: 0)               // current == 0 (a blank slot)
+
+        ws.close(index: 0)
+
+        #expect(ws.documents.count == 1)
+        #expect(ws.currentIndex == 0)       // clamped, not -1
+    }
+
+    /// close of a buffer before the current one shifts the current index left.
+    @Test func closeEarlierBufferShiftsCurrentLeft() {
+        let ws = WorkspaceModel()
+        ws.new()
+        ws.new()                            // current == 2
+
+        ws.close(index: 0)                  // remove an earlier slot
+
+        #expect(ws.documents.count == 2)
+        #expect(ws.currentIndex == 1)       // 2 shifted down to 1
+    }
+
+    /// close of the LAST buffer replaces it with a fresh blank — the window is never
+    /// left empty (ADR-0015).
+    @Test func closeLastBufferReplacesWithBlank() throws {
+        let url = try writeBundle(makeDocument(text: "only"))
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let ws = WorkspaceModel()
+        #expect(ws.open(url: url))
+        ws.close(index: 0)                  // remove the original blank → file-backed is sole buffer
+        #expect(ws.documents.count == 1)
+
+        ws.close(index: 0)                  // now close the only (file-backed) buffer
+
+        #expect(ws.documents.count == 1)    // replaced, not emptied
+        #expect(ws.currentIndex == 0)
+        #expect(ws.current.fileURL == nil)  // the replacement is a fresh blank
+        #expect(ws.current.hasContent == false)
+    }
+
+    // MARK: close(index:) REJECTS WHEN
+
+    /// close REJECTS an unsaved buffer that has content — returns needsConfirmation
+    /// and leaves the workspace entirely unchanged.
+    @Test func closeRejectsUnsavedBufferWithContent() {
+        let ws = WorkspaceModel()
+        ws.current.apply(.insertText("draft", blockID: 0, offset: 0))
+        let countBefore = ws.documents.count
+
+        let outcome = ws.close(index: 0)
+
+        #expect(outcome == .needsConfirmation(index: 0))
+        #expect(ws.documents.count == countBefore)   // nothing removed
+        #expect(ws.current.hasContent)               // buffer still present and intact
+    }
+
+    /// close of an out-of-range index is a no-op returning .closed.
+    @Test func closeOutOfRangeIsNoOp() {
+        let ws = WorkspaceModel()
+        let outcome = ws.close(index: 99)
+
+        #expect(outcome == .closed)
+        #expect(ws.documents.count == 1)
+    }
+
+    // MARK: discardAndClose(index:) DOES
+
+    /// discardAndClose DOES remove an unsaved-with-content buffer (the Discard path),
+    /// dropping its in-memory edits without persisting.
+    @Test func discardAndCloseRemovesUnsavedBuffer() {
+        let ws = WorkspaceModel()
+        ws.new()                                 // slot 1 current
+        ws.current.apply(.insertText("scratch", blockID: 0, offset: 0))
+        #expect(ws.close(index: 1) == .needsConfirmation(index: 1))   // guard fires
+
+        ws.discardAndClose(index: 1)             // user discards
+
+        #expect(ws.documents.count == 1)
+        #expect(ws.currentIndex == 0)
+    }
+
     // MARK: WorkspaceDocument.apply DOES
 
     /// apply(_:) DOES replace the document with the reducer's result — asserts on
