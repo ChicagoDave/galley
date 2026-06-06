@@ -15,6 +15,7 @@
 
 import AppKit
 import Observation
+import SwiftUI
 import UntitledCore
 import UntitledShell
 
@@ -37,11 +38,17 @@ public final class DocumentModel {
     /// A short human-readable description of the last open/save outcome.
     public private(set) var status: String
 
-    /// Creates a model holding a fresh, empty document.
+    /// Creates a model holding a fresh document seeded with one empty paragraph,
+    /// so the editor always has a block to place the caret in.
     public init() {
-        self.document = Document()
+        self.document = DocumentModel.blank
         self.fileURL = nil
-        self.status = "No document open."
+        self.status = "New document."
+    }
+
+    /// A document with a single empty paragraph — the editable starting point.
+    private static var blank: Document {
+        Document(blocks: [Block(id: 0, content: .paragraph(runs: []))], nextBlockID: 1)
     }
 
     /// Prompts for an `.untitled` bundle directory and loads it into `document`.
@@ -72,6 +79,43 @@ public final class DocumentModel {
         } catch {
             status = "Open failed: \(error)"
         }
+    }
+
+    /// Applies one editing intent to the document via the pure core reducer (§8),
+    /// keeping the model the single source of truth (ADR-0004).
+    ///
+    /// - Parameter event: the model-coordinate editing intent from the input layer.
+    func apply(_ event: InputEvent) {
+        document = applyInput(event, to: document)
+    }
+
+    // MARK: Submission metadata
+
+    /// A two-way binding to a string metadata field, for the submission-fields
+    /// panel. Edits flow straight into the document (and persist on save).
+    func metaBinding(_ keyPath: WritableKeyPath<Metadata, String>) -> Binding<String> {
+        Binding(
+            get: { self.document.meta[keyPath: keyPath] },
+            set: { self.document.meta[keyPath: keyPath] = $0 }
+        )
+    }
+
+    // MARK: Chapter overlay (reveal pane chapter-slicing, §6)
+
+    /// Places a boundary chapter cut at a block.
+    func placeCut(atBlock blockID: BlockID) { document.placeChapterCut(atBlock: blockID) }
+
+    /// Removes the boundary chapter cut at a block.
+    func removeCut(atBlock blockID: BlockID) { document.removeChapterCut(atBlock: blockID) }
+
+    /// Moves a boundary chapter cut from one block to another.
+    func moveCut(fromBlock source: BlockID, toBlock target: BlockID) {
+        document.moveChapterCut(fromBlock: source, toBlock: target)
+    }
+
+    /// Sets (or clears) the title of the boundary chapter cut at a block.
+    func setCutTitle(atBlock blockID: BlockID, to title: String?) {
+        document.setChapterCutTitle(atBlock: blockID, to: title)
     }
 
     /// Saves to the current `fileURL`, or prompts for a location if there is none.

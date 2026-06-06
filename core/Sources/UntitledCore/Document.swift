@@ -108,21 +108,70 @@ public struct BibleEntry: Equatable, Hashable, Sendable {
     }
 }
 
-/// Document-level metadata.
+/// Document-level metadata — the fixed set of submission fields every project
+/// carries (the title-page and cover-letter data every submission needs).
 ///
-/// Stub for the headless core: the minimum needed for `Document` to compile and
-/// round-trip. Grows as the format demands.
+/// All fields are plain strings, default-empty, so a project starts blank and the
+/// writer fills only what applies. The whole set round-trips through the sidecar.
 public struct Metadata: Equatable, Sendable {
 
     /// The work's title.
     public var title: String
 
-    /// The author's name.
+    /// The byline — the name to publish under (pen name).
     public var author: String
 
-    /// Creates document metadata.
-    public init(title: String = "", author: String = "") {
+    /// The author's legal name, for contracts and contact.
+    public var legalName: String
+
+    /// Contact email.
+    public var email: String
+
+    /// Contact phone.
+    public var phone: String
+
+    /// Contact mailing address (may be multi-line).
+    public var address: String
+
+    /// Stated word count for submissions (e.g. "approx. 80,000").
+    public var wordCount: String
+
+    /// Genre or category (e.g. "Literary fiction").
+    public var genre: String
+
+    /// One-line pitch / logline.
+    public var logline: String
+
+    /// Short author biography for cover letters.
+    public var bio: String
+
+    /// Representing agent or agency, if any.
+    public var agent: String
+
+    /// Creates document metadata. Every field defaults to empty.
+    public init(
+        title: String = "",
+        author: String = "",
+        legalName: String = "",
+        email: String = "",
+        phone: String = "",
+        address: String = "",
+        wordCount: String = "",
+        genre: String = "",
+        logline: String = "",
+        bio: String = "",
+        agent: String = ""
+    ) {
         self.title = title
         self.author = author
+        self.legalName = legalName
+        self.email = email
+        self.phone = phone
+        self.address = address
+        self.wordCount = wordCount
+        self.genre = genre
+        self.logline = logline
+        self.bio = bio
+        self.agent = agent
     }
 }

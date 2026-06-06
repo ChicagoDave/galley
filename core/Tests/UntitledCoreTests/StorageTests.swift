@@ -54,6 +54,31 @@ func roundTripFullDocument() throws {
     #expect(restored == original)
 }
 
+@Test("round-trip: all submission metadata fields survive serialize → parse")
+func roundTripSubmissionMetadata() throws {
+    let meta = Metadata(
+        title: "The Fourth Morning",
+        author: "M. Rowan",
+        legalName: "Margaret Rowan",
+        email: "m@example.com",
+        phone: "+1 555 0100",
+        address: "12 Harbor Rd\nPortland, ME",
+        wordCount: "approx. 82,000",
+        genre: "Literary fiction",
+        logline: "A flooded town, a fourth morning.",
+        bio: "M. Rowan's stories have appeared in…",
+        agent: "The Vance Agency"
+    )
+    let original = Document(
+        blocks: [Block(id: 0, content: .paragraph(runs: [Run(text: "Body.")]))],
+        meta: meta,
+        nextBlockID: 1
+    )
+    let (prose, sidecar) = serialize(original)
+    let restored = try parse(proseText: prose, sidecar: sidecar)
+    #expect(restored.meta == meta)
+}
+
 @Test("round-trip: an empty document survives serialize → parse")
 func roundTripEmptyDocument() throws {
     let original = Document()

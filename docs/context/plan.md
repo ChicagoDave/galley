@@ -67,7 +67,7 @@
   - Smoke-check verification: launch the app, type a paragraph, press Enter, type a second paragraph, press Backspace at the boundary — confirm the model collapses them correctly (check via reveal toggle or log output). Cmd-I toggles italic. `#` on an empty line becomes a scene break.
   - Integration Reality Statement: the `InputController` is OWNED; the real-path check is the manual smoke check above; any unit test that stubs `NSTextView` interaction must reference this.
 - **Exit state**: The app supports real editing — type, split, merge, italic toggle, scene break, set-piece entry. Every keystroke mutates the model; the display re-derives from it. Tests for the pure translation logic are GREEN. Committed.
-- **Status**: PENDING
+- **Status**: COMPLETE — Architecture: semantic interception + pure reducer (ADR-0013). Core: `InputEvent` + `applyInput(_:to:)` pure reducer (insertText/split/merge/deleteBackward/toggleItalic/makeSceneBreak/toggleSetPiece/breakSetPieceLine) and `smartTypography` helper; 26 behavioral tests (core now 85 GREEN, 0 warnings). Shell: `EditorLayout` (caret↔model map), `InputController` (NSTextView subclass intercepting insert/newline/backspace + Cmd-I), wired into editable `DocumentTextView`/`ContentView`; `DocumentModel.apply(event)`. User-verified live: typing, smart typography (curly quotes, em dash, ellipsis), Enter-split, Backspace-merge, Cmd-I italic. Two bugs found+fixed during verification: blank editable view (TextKit 2 content-storage swap needs forced `layoutViewport()` + needsDisplay) and zero-block seed (model seeds one empty paragraph). (session 6baa7e, 2026-06-05)
 
 ---
 
@@ -88,7 +88,7 @@
   - Behavioral tests: the pure token rendering logic (mapping `[RevealToken]` to view model structs for chip identity, position, label) is testable without AppKit — test it headlessly. The drag/drop interaction gets a manual smoke check.
   - Smoke-check verification: launch, open a document, toggle reveal — confirm all block types show correct chips. Enter chapter-edit mode, drag a `[Chapter]` chip to a new position, toggle reveal off, save, re-open — confirm the cut's position survived the round-trip via the sidecar.
 - **Exit state**: Reveal pane works in both read-only and chapter-edit modes. Chapter cuts survive save/load. Headless token-layout tests GREEN. Committed.
-- **Status**: PENDING
+- **Status**: COMPLETE — Layout tech: SwiftUI flow layout (ADR-0014). Core: `Document.placeChapterCut`/`removeChapterCut`/`moveChapterCut`/`setChapterCutTitle` (ChapterEditing.swift), 9 tests (core now 94 GREEN). Shell lib: `RevealItem`+`revealItems(from:)` and `ChapterAnchor`+`chapterAnchors(of:)` (RevealRendering.swift), 3 tests (shell-lib 7 GREEN). Shell app: `FlowLayout` (SwiftUI Layout), `RevealPane` (token-stream chips + chapter-slicing editor with cut toggle/title), Cmd-/ toggle wired into split `ContentView`; `DocumentModel` cut methods. User-verified live incl. save→reopen cut round-trip. Cut placement is boundary-only via toggles (drag/mid-block deferred; model already supports mid-block). (session 6baa7e, 2026-06-05)
 
 ---
 

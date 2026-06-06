@@ -59,6 +59,15 @@ public func serialize(_ doc: Document) -> (prose: String, sidecar: String) {
         nextBlockID: doc.nextBlockID,
         title: doc.meta.title,
         author: doc.meta.author,
+        legalName: doc.meta.legalName,
+        email: doc.meta.email,
+        phone: doc.meta.phone,
+        address: doc.meta.address,
+        wordCount: doc.meta.wordCount,
+        genre: doc.meta.genre,
+        logline: doc.meta.logline,
+        bio: doc.meta.bio,
+        agent: doc.meta.agent,
         blocks: doc.blocks.map { BlockDTO(id: $0.id, overrides: encodeOverrides($0.overrides)) },
         cuts: doc.cuts.map {
             CutDTO(blockID: $0.blockID, offset: $0.offsetInBlock, title: $0.title, opener: $0.opener?.id)
@@ -184,7 +193,19 @@ public func parse(proseText: String, sidecar: String?) throws -> Document {
     let bible = Bible(entries: dto.bible.map {
         BibleEntry(name: $0.name, canonicalText: $0.canonicalText, notes: $0.notes)
     })
-    let meta = Metadata(title: dto.title, author: dto.author)
+    let meta = Metadata(
+        title: dto.title,
+        author: dto.author,
+        legalName: dto.legalName ?? "",
+        email: dto.email ?? "",
+        phone: dto.phone ?? "",
+        address: dto.address ?? "",
+        wordCount: dto.wordCount ?? "",
+        genre: dto.genre ?? "",
+        logline: dto.logline ?? "",
+        bio: dto.bio ?? "",
+        agent: dto.agent ?? ""
+    )
 
     return Document(blocks: blocks, cuts: cuts, bible: bible, meta: meta, nextBlockID: dto.nextBlockID)
 }
@@ -306,6 +327,17 @@ private struct SidecarDTO: Codable {
     var nextBlockID: Int
     var title: String
     var author: String
+    // Submission fields added after the initial format; optional so sidecars
+    // written before they existed still decode (missing key → nil → "").
+    var legalName: String?
+    var email: String?
+    var phone: String?
+    var address: String?
+    var wordCount: String?
+    var genre: String?
+    var logline: String?
+    var bio: String?
+    var agent: String?
     var blocks: [BlockDTO]
     var cuts: [CutDTO]
     var bible: [BibleDTO]

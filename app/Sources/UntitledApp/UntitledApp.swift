@@ -26,7 +26,7 @@ struct UntitledApp: App {
     @State private var model = DocumentModel()
 
     var body: some Scene {
-        WindowGroup("Untitled") {
+        WindowGroup("Galley") {
             ContentView(model: model)
         }
         .commands {
