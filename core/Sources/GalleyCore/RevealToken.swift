@@ -57,4 +57,10 @@ public enum CodeID: Equatable, Hashable, Sendable {
 
     /// A closing `[/i]` chip, by block and the same span index as its `italicOpen`.
     case italicClose(BlockID, Int)
+
+    /// A presentation-override chip (`[center]`, `[smallCaps]`, `[quote]`, …) for a
+    /// block, by block and the 0-based index of the override on it. Surfaces the
+    /// closed override vocabulary in the reveal so it is visible and deletable
+    /// (ADR-0009 "justify to reveal").
+    case override(BlockID, Int)
 }

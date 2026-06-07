@@ -67,11 +67,40 @@ final class InputController: NSTextView {
     /// palette was summoned. `nil` when no palette session is open.
     var paletteAnchor: BlockID?
 
+    // MARK: Chapter-title editing (LT3) — see InputController+Title.swift
+
+    /// The anchor block of the chapter cut whose heading is being edited inline, or
+    /// `nil` when no heading is being edited. While set, that heading renders as the
+    /// raw title (macros visible) and keystrokes edit the cut's title; every other
+    /// heading shows the resolved title (spreadsheet rule, ADR-0026).
+    var editingTitleCut: BlockID?
+
+    /// Guards the selection observer against re-entry while it re-renders for the
+    /// raw↔resolved heading swap (LT3).
+    var isSyncingSelection = false
+
+    /// The anchor block of a chapter cut whose break is awaiting a Y/N delete
+    /// confirmation, or `nil`. While set, that heading shows the confirm prompt and
+    /// the next key resolves it (LT3) — backspace never silently merges across a break.
+    var pendingBreakDeletion: BlockID?
+
+    /// The caret's character location at the last settled selection, so the selection
+    /// observer can tell which way the caret moved and skip past a break accordingly.
+    var lastCaretLocation = 0
+
     // MARK: Intercepted editing actions
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
-        guard let model = buffer, let caret = caretModelPosition(), !text.isEmpty else { return }
+        guard !text.isEmpty else { return }
+
+        // Editing a chapter heading inline routes to the cut's title, not prose (LT3).
+        if let titlePosition = caretTitlePosition() {
+            insertIntoTitle(text, at: titlePosition)
+            return
+        }
+
+        guard let model = buffer, let caret = caretModelPosition() else { return }
 
         // Typing below the last block (caret clamped from the empty area beneath a
         // non-empty last paragraph) starts a fresh paragraph rather than appending,
@@ -103,7 +132,25 @@ final class InputController: NSTextView {
     }
 
     override func insertNewline(_ sender: Any?) {
+        // Return in a heading commits the title and drops into the chapter's prose (LT3).
+        if caretTitlePosition() != nil {
+            exitTitleEditing(moveToBody: true)
+            return
+        }
+
         guard let model = buffer, let caret = caretModelPosition() else { return }
+
+        // Second Enter ends a styled block: pressing Enter on an empty paragraph that
+        // carries presentation overrides (e.g. a templated epigraph) drops the
+        // overrides instead of continuing the style into another line (LT3).
+        if let block = model.document.blocks.first(where: { $0.id == caret.blockID }),
+           case .paragraph(let runs) = block.content,
+           !block.overrides.isEmpty,
+           runs.allSatisfy({ $0.text.isEmpty }) {
+            model.apply(.clearOverrides(blockID: caret.blockID))
+            renderFromModel(caret: (caret.blockID, 0))
+            return
+        }
 
         model.apply(.splitParagraph(blockID: caret.blockID, offset: caret.offset))
 
@@ -117,6 +164,12 @@ final class InputController: NSTextView {
     }
 
     override func deleteBackward(_ sender: Any?) {
+        // Backspace inside a heading edits the cut's title (LT3).
+        if let titlePosition = caretTitlePosition() {
+            deleteBackwardInTitle(at: titlePosition)
+            return
+        }
+
         guard let model = buffer, let caret = caretModelPosition() else { return }
 
         if caret.offset > 0 {
@@ -126,9 +179,19 @@ final class InputController: NSTextView {
             return
         }
 
+        // Offset 0 at a chapter start: do NOT merge across the break (that would
+        // silently delete it). Raise a Y/N delete confirmation on the heading; the
+        // next key resolves it (LT3).
+        let doc = model.document
+        if doc.cuts.contains(where: { $0.blockID == caret.blockID && $0.offsetInBlock == nil }) {
+            editingTitleCut = nil
+            pendingBreakDeletion = caret.blockID
+            renderFromModel(caret: (caret.blockID, 0))   // caret stays in front of the break
+            return
+        }
+
         // Offset 0: the caret lands at the merge point in the previous paragraph,
         // or stays put when a preceding ornament is removed.
-        let doc = model.document
         guard let index = doc.blocks.firstIndex(where: { $0.id == caret.blockID }), index > 0 else { return }
         let previous = doc.blocks[index - 1]
 
@@ -142,26 +205,56 @@ final class InputController: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
+        // A pending break-deletion is modal: the next key is its Y/N answer (LT3).
+        if pendingBreakDeletion != nil { handleBreakDeletionKey(event); return }
         // Completion navigation (arrows/return/tab/esc) wins while the list is up.
         if completionPopover.isShown, handleCompletionKey(event) { return }
         // The palette captures the same navigation keys while it is open.
         if palettePopover.isShown, handlePaletteKey(event) { return }
 
         if event.modifierFlags.contains(.command) {
-            switch event.charactersIgnoringModifiers {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "z":
+                if event.modifierFlags.contains(.shift) { performRedo() } else { performUndo() }
+                return
+            case "y": performRedo(); return   // Windows-style redo alias (macOS native is Cmd-Shift-Z)
             case "i": toggleItalicAtSelection(); return
             case ";": showBlockPalette(); return
             default: break
             }
         }
+        // Esc commits an in-progress heading edit and returns to the prose.
+        if event.keyCode == 53, editingTitleCut != nil {
+            exitTitleEditing(moveToBody: true)
+            return
+        }
         super.keyDown(with: event)   // routes typing to insertText/insertNewline/deleteBackward
     }
 
-    /// A click moves the caret out of any active `@`-token or palette; dismiss both.
+    /// A click dismisses any `@`-token/palette and answers a pending delete "no". A
+    /// click on a chapter heading enters inline title editing; clicks elsewhere leave
+    /// any heading being edited. Only a click edits a break — arrows glide past (LT3).
     override func mouseDown(with event: NSEvent) {
         endCompletion()
         endPalette()
+        if let pending = pendingBreakDeletion { cancelBreakDeletion(pending) }
+
+        let point = convert(event.locationInWindow, from: nil)
+        if let cut = headingCut(atPoint: point) {
+            beginTitleEditing(cut: cut)
+            return
+        }
+        if editingTitleCut != nil { exitTitleEditing(moveToBody: false) }
         super.mouseDown(with: event)
+    }
+
+    /// After any settled selection change, leave a heading the caret has exited and
+    /// skip the caret past any break it landed on, so arrows move freely past breaks
+    /// (LT3). The caret never rests inside a non-edited heading.
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        guard !isSyncingSelection, !stillSelecting else { return }
+        syncTitleEditingToCaret()
     }
 
     // MARK: Commands
@@ -222,11 +315,16 @@ final class InputController: NSTextView {
         layout.modelPosition(forCharacterAt: selectedRange().location)
     }
 
+    /// The layout the most recent render produced — exposed so the title-editing
+    /// extension can map caret positions to titles.
+    var currentLayout: EditorLayout { layout }
+
     /// Rebuilds the layout + attributed string from the model and pushes it into
-    /// the TextKit 2 content storage. Does not touch the selection.
-    private func applyRender() {
+    /// the TextKit 2 content storage. Does not touch the selection. The heading being
+    /// edited (if any) renders raw; all others resolved (LT3).
+    func applyRender() {
         guard let model = buffer else { return }
-        let newLayout = EditorLayout.build(from: model.document)
+        let newLayout = EditorLayout.build(from: model.document, editingTitleCut: editingTitleCut, confirmingDeleteCut: pendingBreakDeletion)
         layout = newLayout
         lastRenderedDocument = model.document
 

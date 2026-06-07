@@ -53,7 +53,7 @@ extension Document {
     /// the block boundary (offsets are undefined there in v1).
     private func emitBoundaryChapters(_ blockCuts: [ChapterCut], into tokens: inout [DisplayToken]) {
         for cut in blockCuts {
-            tokens.append(.chapterStart(title: cut.title))
+            tokens.append(.chapterStart(role: cut.role, title: cut.title))
         }
     }
 
@@ -69,16 +69,16 @@ extension Document {
         into tokens: inout [DisplayToken]
     ) {
         for cut in cuts where cut.offsetInBlock == nil {
-            tokens.append(.chapterStart(title: cut.title))
+            tokens.append(.chapterStart(role: cut.role, title: cut.title))
         }
 
         let allSpans = spans(from: runs)
         let total = allSpans.reduce(0) { $0 + $1.text.count }
 
         let offsetCuts = cuts
-            .compactMap { cut -> (offset: Int, title: String?)? in
+            .compactMap { cut -> (offset: Int, role: SectionRole, title: String?)? in
                 guard let offset = cut.offsetInBlock else { return nil }
-                return (min(max(offset, 0), total), cut.title)
+                return (min(max(offset, 0), total), cut.role, cut.title)
             }
             .sorted { $0.offset < $1.offset }
 
@@ -93,7 +93,7 @@ extension Document {
             let take = cut.offset - consumed
             let (head, tail) = splitSpans(remaining, at: take)
             appendParagraph(head)
-            tokens.append(.chapterStart(title: cut.title))
+            tokens.append(.chapterStart(role: cut.role, title: cut.title))
             remaining = tail
             consumed = cut.offset
         }

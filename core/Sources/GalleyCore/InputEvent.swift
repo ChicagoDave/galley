@@ -48,4 +48,16 @@ public enum InputEvent: Equatable, Sendable {
     /// Palette's template insertion, BP2). The inserted block is fully editable
     /// from the moment it lands; the caret is moved to it by the view layer.
     case insertBlock(content: BlockContent, overrides: [PresentationOverride], afterBlockID: BlockID)
+
+    /// Insert a section — a fresh empty paragraph after `afterBlockID` with a
+    /// boundary `ChapterCut` of `role` anchored to it (the palette's
+    /// Prologue/Epilogue/Dedication/Chapter rows, LT2). One atomic step so the
+    /// roled cut always anchors the seeded prose, never a half-applied state; the
+    /// caret is moved into the seeded block by the view layer.
+    case insertSection(role: SectionRole, afterBlockID: BlockID)
+
+    /// Clear all presentation overrides from a block, returning it to plain prose
+    /// (LT3) — the "second Enter ends the styled block" behaviour: pressing Enter on
+    /// an empty styled paragraph drops its overrides rather than continuing the style.
+    case clearOverrides(blockID: BlockID)
 }

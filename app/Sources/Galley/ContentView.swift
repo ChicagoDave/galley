@@ -104,6 +104,17 @@ struct ContentView: View {
         }
         .frame(minWidth: 700, minHeight: 480)
         .navigationTitle(projectTitle)   // drives the window's title bar
+        .alert(
+            "Couldn’t open that document",
+            isPresented: Binding(
+                get: { workspace.openError != nil },
+                set: { presented in if !presented { workspace.openError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { workspace.openError = nil }
+        } message: {
+            Text(workspace.openError ?? "")
+        }
         .onAppear {
             // Track the Command key so the bottom-bar buttons can reveal their
             // shortcuts while it is held.

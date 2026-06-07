@@ -192,6 +192,45 @@ func revealChapterCutOnSetPiece() {
     #expect(tokens[1] == .code(label: "Verse", id: .setPieceOpen(id)))
 }
 
+@Test("reveal: a roled cut labels its chip by role, so a prologue reads as a prologue")
+func revealRoledCutLabel() {
+    var doc = Document()
+    let id = doc.mintBlockID()
+    doc.blocks = [Block(id: id, content: .paragraph(runs: [Run(text: "Before it all.")]))]
+    doc.cuts = [ChapterCut(blockID: id, role: .prologue)]
+    #expect(doc.revealProjection() == [
+        .code(label: "Prologue", id: .chapter(id, nil)),
+        .text("Before it all."),
+    ])
+}
+
+@Test("reveal: a block's presentation overrides surface as chips before its text")
+func revealOverrideChips() {
+    var doc = Document()
+    let id = doc.mintBlockID()
+    doc.blocks = [Block(
+        id: id,
+        content: .paragraph(runs: [Run(text: "An epigraph.")]),
+        overrides: [.alignment(.center), .smallCaps]
+    )]
+    #expect(doc.revealProjection() == [
+        .code(label: "center", id: .override(id, 0)),
+        .code(label: "smallCaps", id: .override(id, 1)),
+        .text("An epigraph."),
+    ])
+}
+
+@Test("reveal: a blockQuote override surfaces as a [quote] chip")
+func revealBlockQuoteChip() {
+    var doc = Document()
+    let id = doc.mintBlockID()
+    doc.blocks = [Block(id: id, content: .paragraph(runs: [Run(text: "Set off.")]), overrides: [.blockQuote])]
+    #expect(doc.revealProjection() == [
+        .code(label: "quote", id: .override(id, 0)),
+        .text("Set off."),
+    ])
+}
+
 @Test("reveal: an empty document projects to no tokens")
 func revealEmptyDocument() {
     #expect(Document().revealProjection() == [])

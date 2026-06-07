@@ -33,27 +33,39 @@ struct EditorLayout {
         let blockID: BlockID?
         /// Whether the caret may sit in this segment and edits apply to its block.
         let editable: Bool
-        /// The block's plain text, for Character ↔ UTF-16 offset conversion. Empty
-        /// for non-editable segments.
+        /// The block's plain text (or, for a title segment, the raw title text), for
+        /// Character ↔ UTF-16 offset conversion. Empty for non-editable segments.
         let text: String
+        /// When this segment is an editable chapter *title*, the anchor block of the
+        /// cut it titles; `nil` for prose segments and non-edited headings (LT3).
+        let titleCutBlockID: BlockID?
     }
 
     let attributedString: NSAttributedString
     let segments: [Segment]
 
     /// Builds the editable layout for a document.
-    static func build(from doc: Document) -> EditorLayout {
+    ///
+    /// - Parameters:
+    ///   - doc: the document to render.
+    ///   - editingTitleCut: the anchor block of the cut whose heading is currently
+    ///     being edited, if any. That heading renders as an editable segment showing
+    ///     the *raw* title (macros visible); every other heading is non-editable and
+    ///     shows the *resolved* title (spreadsheet rule, ADR-0026/LT3).
+    ///   - confirmingDeleteCut: the anchor block of the cut whose break is awaiting a
+    ///     Y/N delete confirmation; that heading renders the confirm prompt (LT3).
+    static func build(from doc: Document, editingTitleCut: BlockID? = nil, confirmingDeleteCut: BlockID? = nil) -> EditorLayout {
         let out = NSMutableAttributedString()
         var segments: [Segment] = []
 
-        func append(_ piece: NSAttributedString, blockID: BlockID?, editable: Bool, text: String) {
+        func append(_ piece: NSAttributedString, blockID: BlockID?, editable: Bool, text: String, titleCutBlockID: BlockID? = nil) {
             let start = out.length
             out.append(piece)
             // The piece ends with a paragraph newline; the editable region excludes it.
             let length = editable ? max(0, piece.length - 1) : piece.length
             segments.append(Segment(
                 utf16Range: NSRange(location: start, length: length),
-                blockID: blockID, editable: editable, text: text
+                blockID: blockID, editable: editable, text: text, titleCutBlockID: titleCutBlockID
             ))
         }
 
@@ -63,8 +75,23 @@ struct EditorLayout {
 
         for block in doc.blocks {
             for cut in doc.cuts where cut.blockID == block.id && cut.offsetInBlock == nil {
-                append(Attribution.attributedString(for: [.chapterStart(title: cut.title)]),
-                       blockID: nil, editable: false, text: "")
+                if cut.blockID == confirmingDeleteCut {
+                    // Awaiting Y/N: the heading becomes the delete-confirmation prompt,
+                    // non-editable (the caret stays in the prose below it) (LT3).
+                    append(Attribution.deletePrompt(title: doc.resolvedTitle(forCutAt: cut.blockID)),
+                           blockID: nil, editable: false, text: "")
+                    continue
+                }
+                // Only the heading being edited (clicked into) is an editable segment,
+                // showing the *raw* title (macros visible); every other heading is
+                // non-editable and shows the *resolved* heading (numbering rendered) —
+                // so arrow keys glide past breaks and the caret never rests in one
+                // (LT3). All headings keep `titleCutBlockID` for click hit-testing and
+                // arrow-skip.
+                let isEditing = cut.blockID == editingTitleCut
+                let display = isEditing ? (cut.title ?? "") : doc.resolvedTitle(forCutAt: cut.blockID)
+                append(Attribution.attributedString(for: [.chapterStart(role: cut.role, title: display)]),
+                       blockID: nil, editable: isEditing, text: isEditing ? display : "", titleCutBlockID: cut.blockID)
             }
 
             switch block.content {
@@ -133,7 +160,51 @@ struct EditorLayout {
 
     /// The caret position at the start of the first editable block, if any.
     func firstEditablePosition() -> (blockID: BlockID, offset: Int)? {
-        guard let segment = segments.first(where: { $0.editable }), let id = segment.blockID else { return nil }
+        guard let segment = segments.first(where: { $0.editable && $0.blockID != nil }), let id = segment.blockID else { return nil }
         return (id, 0)
+    }
+
+    // MARK: Chapter-title segments (LT3)
+
+    /// Maps a text-view character position to a `(cutBlockID, offset)` inside an
+    /// editable chapter-title segment, or `nil` if the position is not in one.
+    func titlePosition(forCharacterAt position: Int) -> (cutBlockID: BlockID, offset: Int)? {
+        let nsString = attributedString.string as NSString
+        for segment in segments where segment.editable && segment.titleCutBlockID != nil {
+            let lower = segment.utf16Range.location
+            let upper = lower + segment.utf16Range.length
+            if position >= lower && position <= upper {
+                let prefix = nsString.substring(with: NSRange(location: lower, length: position - lower))
+                return (segment.titleCutBlockID!, prefix.count)
+            }
+        }
+        return nil
+    }
+
+    /// Maps a `(cutBlockID, offset)` in a chapter title to a text-view character
+    /// position, or `nil` if that title is not present as an editable segment.
+    func characterPosition(forTitleCut cutBlockID: BlockID, offset: Int) -> Int? {
+        guard let segment = segments.first(where: { $0.editable && $0.titleCutBlockID == cutBlockID }) else { return nil }
+        let characters = Array(segment.text)
+        let clamped = min(max(offset, 0), characters.count)
+        let prefix = String(characters[0..<clamped]) as NSString
+        return segment.utf16Range.location + prefix.length
+    }
+
+    /// The end-of-title caret position for an editable title, for entering edit mode.
+    func endOfTitle(cutBlockID: BlockID) -> Int? {
+        guard let segment = segments.first(where: { $0.editable && $0.titleCutBlockID == cutBlockID }) else { return nil }
+        return segment.utf16Range.location + segment.utf16Range.length
+    }
+
+    /// The cut whose heading segment (editable or not) covers `position`, for
+    /// click-to-edit hit-testing.
+    func headingCut(forCharacterAt position: Int) -> BlockID? {
+        for segment in segments where segment.titleCutBlockID != nil {
+            let lower = segment.utf16Range.location
+            let upper = lower + segment.utf16Range.length
+            if position >= lower && position <= upper { return segment.titleCutBlockID }
+        }
+        return nil
     }
 }

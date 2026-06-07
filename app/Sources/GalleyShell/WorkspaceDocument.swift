@@ -34,6 +34,17 @@ public final class WorkspaceDocument {
     /// `apply`, `setMetadata`, and the chapter-overlay methods below.
     public private(set) var document: Document
 
+    /// Pre-edit document snapshots for undo, oldest first. Each editing mutator
+    /// pushes the prior document here before changing it; `undo()` pops the top.
+    private var undoStack: [Document] = []
+
+    /// Document snapshots redo can restore, newest-undone last. Cleared by any new
+    /// edit, so the timeline never forks (standard undo semantics).
+    private var redoStack: [Document] = []
+
+    /// The deepest the undo history grows before the oldest snapshot is dropped.
+    private static let undoLimit = 500
+
     /// The bundle directory this buffer was last opened from or saved to, if any.
     /// `nil` for a brand-new buffer that has never been saved.
     public private(set) var fileURL: URL?
@@ -161,11 +172,48 @@ public final class WorkspaceDocument {
         }
     }
 
+    // MARK: Undo / redo (model snapshots)
+
+    /// Whether there is a prior document state to restore.
+    public var canUndo: Bool { !undoStack.isEmpty }
+
+    /// Whether an undone state can be re-applied.
+    public var canRedo: Bool { !redoStack.isEmpty }
+
+    /// Records the current document as an undo checkpoint before an edit, and clears
+    /// the redo timeline (a new edit forks off any undone future). Every editing
+    /// mutator calls this first; load/persist do not (opening a file is not an edit).
+    private func checkpoint() {
+        undoStack.append(document)
+        if undoStack.count > WorkspaceDocument.undoLimit {
+            undoStack.removeFirst(undoStack.count - WorkspaceDocument.undoLimit)
+        }
+        redoStack.removeAll(keepingCapacity: true)
+    }
+
+    /// Restores the most recent pre-edit document (Cmd-Z). The current document is
+    /// pushed onto the redo stack so it can be re-applied. No-op when nothing to undo.
+    public func undo() {
+        guard let previous = undoStack.popLast() else { return }
+        redoStack.append(document)
+        document = previous
+    }
+
+    /// Re-applies the most recently undone document (Cmd-Shift-Z). No-op when there
+    /// is nothing to redo.
+    public func redo() {
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(document)
+        document = next
+    }
+
     /// Applies one editing intent to the document via the pure core reducer (§8),
-    /// keeping the model the single source of truth (ADR-0004).
+    /// keeping the model the single source of truth (ADR-0004). Checkpoints the prior
+    /// state for undo.
     ///
     /// - Parameter event: the model-coordinate editing intent from the input layer.
     public func apply(_ event: InputEvent) {
+        checkpoint()
         document = applyInput(event, to: document)
     }
 
@@ -178,24 +226,27 @@ public final class WorkspaceDocument {
     ///   - keyPath: the metadata field to write.
     ///   - value: the new value.
     public func setMetadata(_ keyPath: WritableKeyPath<Metadata, String>, to value: String) {
+        checkpoint()
         document.meta[keyPath: keyPath] = value
     }
 
     // MARK: Chapter overlay (reveal-pane chapter-slicing, §6)
 
     /// Places a boundary chapter cut at a block.
-    public func placeCut(atBlock blockID: BlockID) { document.placeChapterCut(atBlock: blockID) }
+    public func placeCut(atBlock blockID: BlockID) { checkpoint(); document.placeChapterCut(atBlock: blockID) }
 
     /// Removes the boundary chapter cut at a block.
-    public func removeCut(atBlock blockID: BlockID) { document.removeChapterCut(atBlock: blockID) }
+    public func removeCut(atBlock blockID: BlockID) { checkpoint(); document.removeChapterCut(atBlock: blockID) }
 
     /// Moves a boundary chapter cut from one block to another.
     public func moveCut(fromBlock source: BlockID, toBlock target: BlockID) {
+        checkpoint()
         document.moveChapterCut(fromBlock: source, toBlock: target)
     }
 
     /// Sets (or clears) the title of the boundary chapter cut at a block.
     public func setCutTitle(atBlock blockID: BlockID, to title: String?) {
+        checkpoint()
         document.setChapterCutTitle(atBlock: blockID, to: title)
     }
 }

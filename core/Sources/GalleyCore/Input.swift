@@ -38,6 +38,10 @@ public func applyInput(_ event: InputEvent, to doc: Document) -> Document {
         toggleSetPiece(blockID: blockID, kind: kind, in: &doc)
     case let .insertBlock(content, overrides, afterBlockID):
         insertBlock(content: content, overrides: overrides, afterBlockID: afterBlockID, in: &doc)
+    case let .insertSection(role, afterBlockID):
+        insertSection(role: role, afterBlockID: afterBlockID, in: &doc)
+    case let .clearOverrides(blockID):
+        clearOverrides(blockID: blockID, in: &doc)
     }
     return doc
 }
@@ -80,6 +84,33 @@ private func insertBlock(content: BlockContent, overrides: [PresentationOverride
     guard let i = doc.blocks.firstIndex(where: { $0.id == afterBlockID }) else { return }
     let newID = doc.mintBlockID()
     doc.blocks.insert(Block(id: newID, content: content, overrides: overrides), at: i + 1)
+}
+
+// MARK: - Insert section (Block Palette, LT2)
+
+/// Inserts a section: a fresh empty paragraph immediately after `afterBlockID`
+/// (minting a fresh identity, ADR-0010) plus a boundary `ChapterCut` of `role`
+/// anchored to that seeded block, so the role labels the new section, not the
+/// prior block (ADR-0026). Atomic: the cut always anchors the block it seeds. A
+/// no-op if `afterBlockID` names no block, so a stale palette event can never
+/// crash editing (the reducer's total contract) and the counter is left untouched.
+private func insertSection(role: SectionRole, afterBlockID: BlockID, in doc: inout Document) {
+    guard let i = doc.blocks.firstIndex(where: { $0.id == afterBlockID }) else { return }
+    let newID = doc.mintBlockID()
+    doc.blocks.insert(Block(id: newID, content: .paragraph(runs: [])), at: i + 1)
+    // Seed a non-empty default title (LT3): a section title is never blank, and a
+    // chapter carries the `#a` macro so it auto-numbers immediately. The writer
+    // edits this default in the heading.
+    doc.cuts.append(ChapterCut(blockID: newID, title: role.defaultTitle, role: role))
+}
+
+// MARK: - Clear overrides (end a styled block, LT3)
+
+/// Removes all presentation overrides from a block, returning it to plain prose. A
+/// no-op if `blockID` names no block, so a stale event can never crash editing.
+private func clearOverrides(blockID: BlockID, in doc: inout Document) {
+    guard let i = doc.blocks.firstIndex(where: { $0.id == blockID }) else { return }
+    doc.blocks[i].overrides = []
 }
 
 // MARK: - Delete

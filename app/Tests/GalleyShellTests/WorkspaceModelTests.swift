@@ -41,6 +41,56 @@ struct WorkspaceModelTests {
         return url
     }
 
+    // MARK: Session restore (LT3)
+
+    /// A session store over a private defaults suite, so tests never touch the real
+    /// app domain.
+    private func sessionStore() -> WorkspaceSession {
+        WorkspaceSession(defaults: UserDefaults(suiteName: "galley.tests.\(UUID().uuidString)")!)
+    }
+
+    @Test func restoreReopensTheStoriesSavedToTheSession() throws {
+        let first = try writeBundle(makeDocument(text: "First."))
+        let second = try writeBundle(makeDocument(text: "Second."))
+        defer { try? FileManager.default.removeItem(at: first); try? FileManager.default.removeItem(at: second) }
+        let session = sessionStore()
+        session.save(urls: [first, second], currentIndex: 1)
+
+        let workspace = WorkspaceModel(session: session)
+        #expect(workspace.restore() == true)
+        #expect(workspace.openDocumentURLs.map(\.path) == [first.path, second.path])
+        #expect(workspace.currentIndex == 1)
+    }
+
+    @Test func restoreSkipsAStoryWhoseFileNoLongerExistsAndKeepsTheRest() throws {
+        let present = try writeBundle(makeDocument(text: "Here."))
+        defer { try? FileManager.default.removeItem(at: present) }
+        let missing = makeTempBundleURL()                    // never written
+        let session = sessionStore()
+        session.save(urls: [missing, present], currentIndex: 0)
+
+        let workspace = WorkspaceModel(session: session)
+        #expect(workspace.restore() == true)
+        #expect(workspace.openDocumentURLs.map(\.path) == [present.path])   // missing one dropped
+    }
+
+    @Test func restoreWithNoRecordLeavesTheLaunchBlankUntouched() {
+        let workspace = WorkspaceModel(session: sessionStore())
+        #expect(workspace.restore() == false)
+        #expect(workspace.documents.count == 1)
+        #expect(workspace.current.fileURL == nil)
+    }
+
+    @Test func openRecordsTheStoryToTheSessionForNextLaunch() throws {
+        let url = try writeBundle(makeDocument(text: "Saved."))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let session = sessionStore()
+
+        let workspace = WorkspaceModel(session: session)
+        #expect(workspace.open(url: url) == true)
+        #expect(session.load().urls.map(\.path) == [url.path])   // open() persisted the session
+    }
+
     // MARK: new() DOES
 
     /// new() DOES append a blank buffer and make it current, leaving the prior one.

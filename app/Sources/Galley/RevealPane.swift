@@ -35,7 +35,7 @@ struct RevealPane: View {
             ScrollView {
                 FlowLayout {
                     ForEach(revealItems(from: buffer.document.revealProjection())) { item in
-                        RevealItemView(item: item)
+                        RevealItemView(buffer: buffer, item: item)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -52,9 +52,12 @@ struct RevealPane: View {
     }
 }
 
-/// One reveal item: prose text, or a colored code chip.
+/// One reveal item: prose text, or a colored code chip. A boundary section cut
+/// renders as a role chip plus its tap-to-edit title (LT2); all other chips are
+/// plain colored capsules.
 private struct RevealItemView: View {
 
+    @Bindable var buffer: WorkspaceDocument
     let item: RevealItem
 
     var body: some View {
@@ -62,13 +65,22 @@ private struct RevealItemView: View {
         case .text(let string):
             Text(string).font(.system(.body, design: .serif))
         case .chip(let label, let code):
-            Text(label)
-                .font(.caption2.monospaced())
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(Capsule().fill(color(for: code)))
-                .foregroundStyle(.white)
+            if case .chapter(let blockID, nil) = code {
+                SectionChip(buffer: buffer, role: label, blockID: blockID)
+            } else {
+                chip(label: label, color: color(for: code))
+            }
         }
+    }
+
+    /// A plain colored capsule chip.
+    private func chip(label: String, color: Color) -> some View {
+        Text(label)
+            .font(.caption2.monospaced())
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(color))
+            .foregroundStyle(.white)
     }
 
     /// Chapter chips read as the structural surface; other codes are muted.
@@ -79,12 +91,48 @@ private struct RevealItemView: View {
         case .setPieceOpen, .setPieceClose: return .purple
         case .line: return .gray
         case .italicOpen, .italicClose: return .secondary
+        case .override: return .teal
+        }
+    }
+}
+
+/// A boundary section cut in the reveal stream: the role capsule (Chapter /
+/// Prologue / …) plus its resolved title (numbering macros rendered to their
+/// chapter number, ADR-0026). Read-only here — titles are edited inline in the main
+/// editor by clicking the heading (LT3); the reveal is the truth view, not a second
+/// editing surface.
+private struct SectionChip: View {
+
+    @Bindable var buffer: WorkspaceDocument
+    let role: String
+    let blockID: BlockID
+
+    /// The display title — macros resolved to the chapter number (ADR-0026).
+    private var resolvedTitle: String {
+        buffer.document.resolvedTitle(forCutAt: blockID)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(role)
+                .font(.caption2.monospaced())
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(Color.accentColor))
+                .foregroundStyle(.white)
+
+            if !resolvedTitle.isEmpty {
+                Text(resolvedTitle)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+            }
         }
     }
 }
 
 /// The chapter-slicing editor: one row per block, with a toggle to place/remove a
-/// boundary cut and a field to title it (§6).
+/// boundary cut (§6). Titling lives in the reveal stream itself (tap a section
+/// chip's title, LT2), not here — structure is named in the truth view, not a panel.
 private struct ChapterEditor: View {
 
     @Bindable var buffer: WorkspaceDocument
@@ -92,7 +140,7 @@ private struct ChapterEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Chapters").font(.subheadline.bold())
-            Text("Toggle a block to begin a chapter there.")
+            Text("Toggle a block to begin a chapter there. Name it by tapping its chip above.")
                 .font(.caption).foregroundStyle(.secondary)
 
             ScrollView {
@@ -107,7 +155,9 @@ private struct ChapterEditor: View {
     }
 }
 
-/// A single chapter-anchor row: cut toggle, optional title field, block preview.
+/// A single chapter-anchor row: a cut toggle (place/remove a boundary cut) and the
+/// block preview. Titling is done in the reveal stream (tap the section chip), not
+/// here, so this row stays a pure placement control.
 private struct ChapterAnchorRow: View {
 
     @Bindable var buffer: WorkspaceDocument
@@ -124,15 +174,6 @@ private struct ChapterAnchorRow: View {
             ))
             .labelsHidden()
             .toggleStyle(.checkbox)
-
-            if anchor.hasCut {
-                TextField("title", text: Binding(
-                    get: { anchor.title ?? "" },
-                    set: { buffer.setCutTitle(atBlock: anchor.id, to: $0) }
-                ))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 110)
-            }
 
             Text(anchor.label)
                 .font(.caption)
