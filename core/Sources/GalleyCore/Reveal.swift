@@ -53,6 +53,12 @@ extension Document {
                     tokens.append(.code(label: "line", id: .line(block.id, index)))
                 }
                 tokens.append(.code(label: "/" + label, id: .setPieceClose(block.id)))
+
+            case .figure(let imageRef, _):
+                // A figure is a boundary block (like a scene break): cuts surface
+                // before it, then the single addressable `[figure: <ref>]` chip (LT4).
+                emitStartCuts(blockCuts, blockID: block.id, into: &tokens)
+                tokens.append(.code(label: "figure: \(imageRef)", id: .figure(block.id)))
             }
         }
 

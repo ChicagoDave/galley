@@ -63,4 +63,9 @@ public enum CodeID: Equatable, Hashable, Sendable {
     /// closed override vocabulary in the reveal so it is visible and deletable
     /// (ADR-0009 "justify to reveal").
     case override(BlockID, Int)
+
+    /// A `[figure: <ref>]` chip for a figure block (LT4), by block. The image
+    /// reference and caption are intent the typesetter consumes; the chip is the
+    /// addressable object the writer sees and can delete (ADR-0009 amendment).
+    case figure(BlockID)
 }

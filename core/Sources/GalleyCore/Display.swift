@@ -43,6 +43,10 @@ extension Document {
                 for line in lines {
                     tokens.append(.setPieceLine(kind: kind, spans: spans(from: line), overrides: block.overrides))
                 }
+
+            case .figure(let imageRef, let caption):
+                emitBoundaryChapters(blockCuts, into: &tokens)
+                tokens.append(.figure(imageRef: imageRef, caption: caption))
             }
         }
 

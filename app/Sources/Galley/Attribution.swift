@@ -56,6 +56,8 @@ enum Attribution {
                 out.append(setPieceLine(kind: kind, spans: spans, overrides: overrides))
             case .chapterStart(let role, let title):
                 out.append(chapterHeading(role: role, title: title))
+            case .figure(let imageRef, let caption):
+                out.append(figurePlaceholder(imageRef: imageRef, caption: caption))
             }
         }
         return out
@@ -106,6 +108,29 @@ enum Attribution {
             spacingAfter: paragraphSpacing
         )
         return line(spans, baseFont: font(bodyFont, smallCaps: hasSmallCaps(overrides)), derivedItalic: derivedItalic, style: style)
+    }
+
+    /// A figure placeholder (LT4-1 baseline): a centered `🖼 <ref>` line with the
+    /// caption beneath it — Galley shows intent, never the image (ADR-0024). LT4-2
+    /// replaces this with a drawn `NSTextAttachment` box + an editable caption
+    /// segment (ADR-0028); this minimal version keeps the figure visible meanwhile.
+    private static func figurePlaceholder(imageRef: String, caption: String) -> NSAttributedString {
+        let style = paragraphStyle(alignment: .center, firstLineIndent: 0, spacingBefore: blockSpacing, spacingAfter: blockSpacing)
+        let out = NSMutableAttributedString()
+        let refLabel = imageRef.isEmpty ? "(image)" : imageRef
+        out.append(NSAttributedString(string: "🖼 \(refLabel)\n", attributes: [
+            .font: bodyFont,
+            .paragraphStyle: style,
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]))
+        if !caption.isEmpty {
+            out.append(NSAttributedString(string: caption + "\n", attributes: [
+                .font: NSFont(descriptor: bodyFont.fontDescriptor.withSymbolicTraits(.italic), size: bodyFont.pointSize) ?? bodyFont,
+                .paragraphStyle: style,
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+        }
+        return out
     }
 
     /// The scene-break ornament, centered with generous spacing.

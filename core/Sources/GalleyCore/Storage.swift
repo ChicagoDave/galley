@@ -119,14 +119,92 @@ private func serializeBlock(_ content: BlockContent) -> String {
     case .setPiece(let kind, let lines):
         let body = lines.map { serializeRuns($0) }
         return ([":::" + kindName(kind)] + body + [":::"]).joined(separator: "\n")
+    case .figure(let imageRef, let caption):
+        // A single human-readable marker line (ADR-0027): `[figure: ref]`, or
+        // `[figure: ref | caption]` when captioned. `\`, `]`, and `|` are escaped so
+        // the fields round-trip; the caption lives in the prose (ADR-0007).
+        let ref = encodeFigureField(imageRef)
+        return caption.isEmpty
+            ? "[figure: \(ref)]"
+            : "[figure: \(ref) | \(encodeFigureField(caption))]"
     }
+}
+
+/// Escapes a figure field (`imageRef`/`caption`) for the prose marker: `\`, `]`, and
+/// `|` are backslash-escaped so the marker's delimiters stay unambiguous (ADR-0027).
+private func encodeFigureField(_ text: String) -> String {
+    var out = ""
+    for character in text {
+        switch character {
+        case "\\": out += "\\\\"
+        case "]": out += "\\]"
+        case "|": out += "\\|"
+        default: out.append(character)
+        }
+    }
+    return out
+}
+
+/// Reverses `encodeFigureField`: honours `\` escapes, copying the escaped character
+/// verbatim.
+private func decodeFigureField(_ text: String) -> String {
+    var out = ""
+    var index = text.startIndex
+    while index < text.endIndex {
+        if text[index] == "\\" {
+            let next = text.index(after: index)
+            if next < text.endIndex {
+                out.append(text[next])
+                index = text.index(after: next)
+                continue
+            }
+        }
+        out.append(text[index])
+        index = text.index(after: index)
+    }
+    return out
+}
+
+/// Parses a `[figure: …]` marker line into its `(imageRef, caption)` (ADR-0027).
+///
+/// The payload between `[figure:` and the trailing `]` is split at the first
+/// *unescaped* `|`; the single cosmetic spaces the serializer adds (`[figure: `,
+/// ` | `) are stripped, then each side is unescaped. No `|` means an empty caption.
+private func parseFigureMarker(_ line: String) -> (imageRef: String, caption: String) {
+    var payload = String(line.dropFirst("[figure:".count).dropLast())   // strip "[figure:" and "]"
+    if payload.hasPrefix(" ") { payload.removeFirst() }
+
+    guard let bar = firstUnescapedPipe(in: payload) else {
+        return (decodeFigureField(payload), "")
+    }
+    var refPart = String(payload[..<bar])
+    var captionPart = String(payload[payload.index(after: bar)...])
+    if refPart.hasSuffix(" ") { refPart.removeLast() }
+    if captionPart.hasPrefix(" ") { captionPart.removeFirst() }
+    return (decodeFigureField(refPart), decodeFigureField(captionPart))
+}
+
+/// The index of the first `|` not preceded by a `\` escape, or `nil`.
+private func firstUnescapedPipe(in text: String) -> String.Index? {
+    var index = text.startIndex
+    while index < text.endIndex {
+        let character = text[index]
+        if character == "\\" {
+            let next = text.index(after: index)
+            index = next < text.endIndex ? text.index(after: next) : text.endIndex
+            continue
+        }
+        if character == "|" { return index }
+        index = text.index(after: index)
+    }
+    return nil
 }
 
 /// Serializes a paragraph's runs to a single line, escaping it further if the
 /// result would otherwise be misread as a scene break or set-piece fence.
 private func serializeParagraphLine(_ runs: [Run]) -> String {
     let line = serializeRuns(runs)
-    if line == "***" || line == "#" || line.hasPrefix(":::") {
+    if line == "***" || line == "#" || line.hasPrefix(":::") || line.hasPrefix("[figure:") {
         return "\\" + line
     }
     return line
@@ -260,6 +338,13 @@ private func parseProseBlocks(_ proseText: String) throws -> [BlockContent] {
 
         if line == "***" || line == "#" {
             blocks.append(.sceneBreak)
+            index += 1
+            continue
+        }
+
+        if line.hasPrefix("[figure:") && line.hasSuffix("]") {
+            let (imageRef, caption) = parseFigureMarker(line)
+            blocks.append(.figure(imageRef: imageRef, caption: caption))
             index += 1
             continue
         }

@@ -105,6 +105,8 @@ public final class WorkspaceDocument {
                 return lines.contains { line in line.contains { !$0.text.isEmpty } }
             case .sceneBreak:
                 return false
+            case .figure(let imageRef, let caption):
+                return !imageRef.isEmpty || !caption.isEmpty   // a placed figure is real content
             }
         }
     }

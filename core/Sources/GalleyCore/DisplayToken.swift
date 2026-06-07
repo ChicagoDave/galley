@@ -36,6 +36,10 @@ public enum DisplayToken: Equatable, Sendable {
     /// (ADR-0026) and its title, if any; the shell renders the heading — the title
     /// when set, else the role name for a non-chapter section, else a divider.
     case chapterStart(role: SectionRole, title: String?)
+
+    /// A figure placeholder (LT4): the image reference and caption. The shell renders
+    /// a placeholder (icon + ref + caption) — never the image itself (ADR-0024).
+    case figure(imageRef: String, caption: String)
 }
 
 /// A run of display text plus its single inline mark.

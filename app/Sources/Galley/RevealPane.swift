@@ -92,6 +92,7 @@ private struct RevealItemView: View {
         case .line: return .gray
         case .italicOpen, .italicClose: return .secondary
         case .override: return .teal
+        case .figure: return .indigo
         }
     }
 }

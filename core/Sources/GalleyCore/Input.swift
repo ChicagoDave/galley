@@ -196,8 +196,8 @@ private func toggleSetPiece(blockID: BlockID, kind: SetPieceKind, in doc: inout 
         }
     case .setPiece(_, let lines):
         doc.blocks[i].content = .paragraph(runs: coalesceRuns(lines.flatMap { $0 }))
-    case .sceneBreak:
-        break
+    case .sceneBreak, .figure:
+        break   // a scene break or figure has no prose to toggle into a set-piece
     }
 }
 

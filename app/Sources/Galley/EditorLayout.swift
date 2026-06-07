@@ -107,6 +107,13 @@ struct EditorLayout {
                     append(Attribution.attributedString(for: [.setPieceLine(kind: kind, spans: spans(line), overrides: block.overrides)]),
                            blockID: block.id, editable: false, text: "")
                 }
+
+            case .figure(let imageRef, let caption):
+                // LT4-1 stub: render the placeholder as plain display tokens so the
+                // figure is visible and round-trips. The real `NSTextAttachment`
+                // placeholder + editable caption segment land in LT4-2 (ADR-0028).
+                append(Attribution.attributedString(for: [.figure(imageRef: imageRef, caption: caption)]),
+                       blockID: block.id, editable: false, text: "")
             }
         }
 
