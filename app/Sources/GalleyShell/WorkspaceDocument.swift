@@ -47,6 +47,14 @@ public final class WorkspaceDocument {
     /// The deepest the undo history grows before the oldest snapshot is dropped.
     private static let undoLimit = 500
 
+    /// The one live editing caret, in model coordinates, shared by every editing
+    /// surface over this buffer (ADR-0033). Both the prose editor and the Reveal Codes
+    /// surface write it when their own selection moves and read it to reconcile after a
+    /// model change — so "the reveal caret matches the editor" is one selection
+    /// rendered twice (ADR-0030), not two carets kept in sync. It is unified with the
+    /// caret stored in the undo timeline: `performUndo`/`performRedo` set it.
+    public var currentCaret: Caret?
+
     /// The bundle directory this buffer was last opened from or saved to, if any.
     /// `nil` for a brand-new buffer that has never been saved.
     public private(set) var fileURL: URL?
@@ -266,6 +274,22 @@ public final class WorkspaceDocument {
         undoStack.append((document, currentCaret))
         document = entry.document
         return entry.caret
+    }
+
+    /// Restores the previous document and its caret onto the shared timeline (Cmd-Z),
+    /// updating `currentCaret` so every editing surface reconciles to the restored
+    /// position (ADR-0033). The hoisted, surface-agnostic undo entry point: whichever
+    /// pane has focus calls this, and both panes follow the one `currentCaret`. No-op
+    /// when there is nothing to undo.
+    public func performUndo() {
+        currentCaret = undo(currentCaret: currentCaret)
+    }
+
+    /// Re-applies the most recently undone document and its caret onto the shared
+    /// timeline (Cmd-Shift-Z), updating `currentCaret`. The hoisted redo counterpart of
+    /// `performUndo`. No-op when there is nothing to redo.
+    public func performRedo() {
+        currentCaret = redo(currentCaret: currentCaret)
     }
 
     /// Applies one editing intent to the document via the pure core reducer (§8),

@@ -267,6 +267,22 @@ final class InputController: NSTextView {
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         guard !isSyncingSelection, !stillSelecting else { return }
         syncTitleEditingToCaret()
+        // Publish this surface's caret to the shared one so the reveal pane reflects it
+        // and the undo timeline records the live (incl. post-edit) caret (ADR-0033).
+        // Suppressed during our own re-render/reconcile via `isSyncingSelection`.
+        buffer?.currentCaret = caretModelSelection()
+    }
+
+    /// Reconciles this view's selection to the shared `currentCaret` (ADR-0033) — used
+    /// when the *other* surface moved the caret. A no-op when the view's selection
+    /// already matches, so the surface that originated the change does not loop.
+    func reconcileSharedCaret() {
+        guard let caret = buffer?.currentCaret,
+              let lower = layout.characterPosition(forBlock: caret.start.blockID, offset: caret.start.offset),
+              let upper = layout.characterPosition(forBlock: caret.end.blockID, offset: caret.end.offset) else { return }
+        let target = NSRange(location: lower, length: max(0, upper - lower))
+        guard target != selectedRange() else { return }
+        withoutSelectionSync { setSelectedRange(target) }
     }
 
     // MARK: Commands

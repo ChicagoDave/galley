@@ -260,21 +260,26 @@ extension InputController {
 
     /// Restores the previous document state and lands the caret where it was *before*
     /// the undone edit — the caret recorded with that edit, not a position re-derived
-    /// from a document diff (ADR-0031).
+    /// from a document diff (ADR-0031). Dispatches to the shared workspace-level
+    /// timeline (ADR-0033) so undo works identically from either editing surface; the
+    /// restored caret updates `currentCaret`, which both panes then reconcile to.
     func performUndo() {
         guard let buffer else { return }
         editingTitleCut = nil
         pendingBreakDeletion = nil
-        restoreCaret(buffer.undo(currentCaret: caretModelSelection()))
+        buffer.performUndo()
+        restoreCaret(buffer.currentCaret)
     }
 
     /// Re-applies the most recently undone state, landing the caret where it was after
-    /// that edit (the caret recorded at undo time), as redo conventionally does.
+    /// that edit (the caret recorded at undo time), as redo conventionally does. Shares
+    /// the workspace-level timeline with the reveal surface (ADR-0033).
     func performRedo() {
         guard let buffer else { return }
         editingTitleCut = nil
         pendingBreakDeletion = nil
-        restoreCaret(buffer.redo(currentCaret: caretModelSelection()))
+        buffer.performRedo()
+        restoreCaret(buffer.currentCaret)
     }
 
     /// Re-renders after an undo/redo and restores `caret` (clamped to a valid mapped

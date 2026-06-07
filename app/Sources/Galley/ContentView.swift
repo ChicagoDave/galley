@@ -62,12 +62,12 @@ struct ContentView: View {
                     Divider()
                 }
 
-                DocumentTextView(buffer: current)
+                DocumentTextView(buffer: current, caretToken: current.currentCaret)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if showReveal {
                     Divider()
-                    RevealPane(buffer: current)
+                    RevealPane(buffer: current, caretToken: current.currentCaret)
                         .frame(width: 340)
                 }
 
