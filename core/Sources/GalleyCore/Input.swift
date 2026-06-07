@@ -42,6 +42,8 @@ public func applyInput(_ event: InputEvent, to doc: Document) -> Document {
         insertSection(role: role, afterBlockID: afterBlockID, in: &doc)
     case let .clearOverrides(blockID):
         clearOverrides(blockID: blockID, in: &doc)
+    case let .setFigureCaption(blockID, caption):
+        setFigureCaption(blockID: blockID, caption: caption, in: &doc)
     }
     return doc
 }
@@ -111,6 +113,18 @@ private func insertSection(role: SectionRole, afterBlockID: BlockID, in doc: ino
 private func clearOverrides(blockID: BlockID, in doc: inout Document) {
     guard let i = doc.blocks.firstIndex(where: { $0.id == blockID }) else { return }
     doc.blocks[i].overrides = []
+}
+
+// MARK: - Figure caption (LT4-2, ADR-0028 Option A)
+
+/// Replaces the caption of a figure block, preserving its `imageRef`. A no-op if
+/// `blockID` names no block or the block is not a figure, so a stale or
+/// mis-targeted caption event can never crash editing (the reducer's total
+/// contract). An empty caption is valid (the writer cleared the field).
+private func setFigureCaption(blockID: BlockID, caption: String, in doc: inout Document) {
+    guard let i = doc.blocks.firstIndex(where: { $0.id == blockID }),
+          case .figure(let imageRef, _) = doc.blocks[i].content else { return }
+    doc.blocks[i].content = .figure(imageRef: imageRef, caption: caption)
 }
 
 // MARK: - Delete

@@ -66,6 +66,13 @@ public final class WorkspaceDocument {
     /// Empty for a never-saved buffer (no package on disk yet).
     public private(set) var templateIndex = TemplateIndex()
 
+    /// Figure image references (LT4-2) that name a file missing from the package's
+    /// `images/` directory — surfaced as a non-blocking warning, never a load
+    /// failure (a figure records intent; the typesetter resolves the file, ADR-0024).
+    /// Recomputed on load and save; empty for a never-saved buffer or when every
+    /// non-empty ref resolves.
+    public private(set) var missingImageRefs: [String] = []
+
     /// Creates a buffer. Defaults to a fresh blank document with no associated file.
     ///
     /// - Parameters:
@@ -125,6 +132,7 @@ public final class WorkspaceDocument {
         document = loaded
         fileURL = url
         reloadIndexes()
+        revalidateImageRefs()
         status = "Opened \(url.lastPathComponent) — \(loaded.blocks.count) block(s)."
     }
 
@@ -165,12 +173,44 @@ public final class WorkspaceDocument {
         do {
             try DocumentBundle.write(document, to: url)
             fileURL = url
+            ensureImagesDirectory(in: url)
             reloadIndexes()
+            revalidateImageRefs()
             status = "Saved \(url.lastPathComponent)."
             return true
         } catch {
             status = "Save failed: \(error)"
             return false
+        }
+    }
+
+    // MARK: Figure images (LT4-2)
+
+    /// The non-empty image references of every figure block, in document order.
+    private var figureImageRefs: [String] {
+        document.blocks.compactMap { block in
+            guard case .figure(let imageRef, _) = block.content, !imageRef.isEmpty else { return nil }
+            return imageRef
+        }
+    }
+
+    /// Creates the package's `images/` directory if the document references any
+    /// image and the directory does not exist yet. The directory holds writer-placed
+    /// assets (ADR-0020 pattern); we never copy or fetch image content (ADR-0024).
+    private func ensureImagesDirectory(in url: URL) {
+        guard !figureImageRefs.isEmpty else { return }
+        let images = url.appendingPathComponent("images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: images, withIntermediateDirectories: true)
+    }
+
+    /// Recomputes `missingImageRefs`: every non-empty figure ref whose file is absent
+    /// from the package's `images/` directory. Empty when there is no package yet
+    /// (a never-saved buffer cannot have missing files — there is nowhere to look).
+    private func revalidateImageRefs() {
+        guard let url = fileURL else { missingImageRefs = []; return }
+        let images = url.appendingPathComponent("images", isDirectory: true)
+        missingImageRefs = figureImageRefs.filter { ref in
+            !FileManager.default.fileExists(atPath: images.appendingPathComponent(ref).path)
         }
     }
 
@@ -250,5 +290,12 @@ public final class WorkspaceDocument {
     public func setCutTitle(atBlock blockID: BlockID, to title: String?) {
         checkpoint()
         document.setChapterCutTitle(atBlock: blockID, to: title)
+    }
+
+    /// Sets the caption of the figure block at `blockID` (LT4-2, ADR-0028 Option A).
+    /// Routes through the pure reducer so figure-block invariants stay in the core; a
+    /// no-op on an unknown or non-figure block (the reducer's total contract).
+    public func setFigureCaption(atBlock blockID: BlockID, to caption: String) {
+        apply(.setFigureCaption(blockID: blockID, caption: caption))
     }
 }

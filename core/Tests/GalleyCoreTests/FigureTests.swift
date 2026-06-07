@@ -106,4 +106,34 @@ struct FigureTests {
         let figureAt = tokens.firstIndex(of: .code(label: "figure: x.png", id: .figure(1)))
         #expect(chapterAt != nil && figureAt != nil && chapterAt! < figureAt!)
     }
+
+    // MARK: setFigureCaption reducer (LT4-2, ADR-0028 Option A)
+
+    @Test func setFigureCaptionReplacesTheCaptionAndKeepsTheRef() {
+        let doc = docWithFigure(ref: "harbor.jpg", caption: "old caption")
+        let result = applyInput(.setFigureCaption(blockID: 1, caption: "Dawn over the harbor."), to: doc)
+        #expect(result.blocks[1].content == .figure(imageRef: "harbor.jpg", caption: "Dawn over the harbor."))
+        // Surrounding blocks are untouched.
+        #expect(result.blocks[0] == doc.blocks[0])
+        #expect(result.blocks[2] == doc.blocks[2])
+    }
+
+    @Test func setFigureCaptionAcceptsAnEmptyCaption() {
+        let doc = docWithFigure(ref: "harbor.jpg", caption: "had one")
+        let result = applyInput(.setFigureCaption(blockID: 1, caption: ""), to: doc)
+        #expect(result.blocks[1].content == .figure(imageRef: "harbor.jpg", caption: ""))
+    }
+
+    @Test func setFigureCaptionOnAnUnknownBlockIsANoOp() {
+        let doc = docWithFigure(ref: "harbor.jpg", caption: "keep me")
+        let result = applyInput(.setFigureCaption(blockID: 99, caption: "ignored"), to: doc)
+        #expect(result == doc)
+    }
+
+    @Test func setFigureCaptionOnANonFigureBlockIsANoOp() {
+        let doc = docWithFigure(ref: "harbor.jpg", caption: "keep me")
+        // Block 0 is a paragraph, not a figure.
+        let result = applyInput(.setFigureCaption(blockID: 0, caption: "ignored"), to: doc)
+        #expect(result == doc)
+    }
 }

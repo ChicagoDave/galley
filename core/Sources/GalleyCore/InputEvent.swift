@@ -60,4 +60,9 @@ public enum InputEvent: Equatable, Sendable {
     /// (LT3) — the "second Enter ends the styled block" behaviour: pressing Enter on
     /// an empty styled paragraph drops its overrides rather than continuing the style.
     case clearOverrides(blockID: BlockID)
+
+    /// Replace the caption of a figure block (LT4-2, ADR-0028 Option A). The caption
+    /// is edited inline as a real, keyboard-reachable segment, so each keystroke is
+    /// one of these events against the figure's block. `imageRef` is unaffected.
+    case setFigureCaption(blockID: BlockID, caption: String)
 }

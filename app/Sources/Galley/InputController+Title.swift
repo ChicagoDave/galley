@@ -34,8 +34,9 @@ extension InputController {
     }
 
     /// Runs `body` with the selection observer suppressed, restoring the prior state
-    /// so nested calls compose correctly.
-    private func withoutSelectionSync(_ body: () -> Void) {
+    /// so nested calls compose correctly. Internal so the figure-caption extension
+    /// (LT4-2) reuses the same suppression while it re-renders.
+    func withoutSelectionSync(_ body: () -> Void) {
         let wasSyncing = isSyncingSelection
         isSyncingSelection = true
         defer { isSyncingSelection = wasSyncing }
@@ -68,6 +69,13 @@ extension InputController {
         let location = selectedRange().location
         if editingTitleCut == nil, let heading = currentLayout.headingCut(forCharacterAt: location) {
             skipPastHeading(cut: heading, forward: location >= lastCaretLocation)
+        }
+
+        // 3. If the caret landed on a figure's placeholder box, glide it onto the
+        //    editable caption (down) or the previous block (up) — the box is never a
+        //    resting place (LT4-2), mirroring how breaks are skipped.
+        if editingTitleCut == nil {
+            glidePastFigureBox(forward: selectedRange().location >= lastCaretLocation)
         }
         lastCaretLocation = selectedRange().location
     }

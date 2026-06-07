@@ -32,6 +32,10 @@ enum BlockPaletteAction: Equatable {
     /// Insert a scene-break ornament (the one complete built-in block).
     case sceneBreak
 
+    /// Insert a figure placeholder — an empty image ref + caption the writer fills in
+    /// (LT4-2). Galley records intent only; the typesetter places the image (ADR-0024).
+    case figure
+
     /// Insert an editable paragraph seeded from a user template's body + overrides.
     case template(BlockTemplate)
 
@@ -62,9 +66,9 @@ enum BlockPalette {
         ("Chapter", .chapter),
     ]
 
-    /// The palette rows for a buffer, in three groups (LT2): (1) the Scene Break
-    /// built-in; (2) the writer's templates (3-layer merged index); (3) the four
-    /// section inserts. A buffer with no templates still offers groups (1) and (3),
+    /// The palette rows for a buffer, in three groups (LT2/LT4-2): (1) the Scene Break
+    /// and Figure built-ins; (2) the writer's templates (3-layer merged index); (3) the
+    /// four section inserts. A buffer with no templates still offers groups (1) and (3),
     /// so the palette is never empty. The fixed rows carry mnemonic keys (LT3);
     /// templates are chosen by arrow/Return.
     ///
@@ -72,7 +76,7 @@ enum BlockPalette {
     /// - Returns: the ordered palette rows.
     static func items(templates: TemplateIndex) -> [BlockPaletteItem] {
         let rows: [(label: String, action: BlockPaletteAction)] =
-            [("Scene Break", .sceneBreak)]
+            [("Scene Break", .sceneBreak), ("Figure", .figure)]
             + templates.matches(for: "", limit: .max).map { ($0.name, .template($0)) }
             + sections.map { ($0.label, .section($0.role)) }
 
@@ -84,11 +88,11 @@ enum BlockPalette {
 
     /// Mnemonic keys for the palette rows: a unique in-word letter per row (LT3),
     /// uppercased, shown so they are discoverable. A priority pass gives the common
-    /// items their natural first letter (Chapter→C, Prologue→P, Scene Break→S, and
-    /// the built-in templates Epigraph→E / Dateline→D / Block Quote→B); the remaining
+    /// items their natural first letter (Chapter→C, Prologue→P, Scene Break→S, Figure→F,
+    /// and the built-in templates Epigraph→E / Dateline→D / Block Quote→B); the remaining
     /// rows (Epilogue, Dedication, user templates) take their first still-free letter.
     private static func assignKeys(_ labels: [String]) -> [String?] {
-        let preferred = ["Chapter", "Scene Break", "Prologue", "Epigraph", "Dateline", "Block Quote"]
+        let preferred = ["Chapter", "Scene Break", "Prologue", "Figure", "Epigraph", "Dateline", "Block Quote"]
         let order = preferred.compactMap { labels.firstIndex(of: $0) }
             + labels.indices.filter { !preferred.contains(labels[$0]) }
 

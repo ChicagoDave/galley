@@ -57,7 +57,8 @@ enum Attribution {
             case .chapterStart(let role, let title):
                 out.append(chapterHeading(role: role, title: title))
             case .figure(let imageRef, let caption):
-                out.append(figurePlaceholder(imageRef: imageRef, caption: caption))
+                out.append(figureBox(imageRef: imageRef))
+                out.append(figureCaption(caption))
             }
         }
         return out
@@ -110,27 +111,67 @@ enum Attribution {
         return line(spans, baseFont: font(bodyFont, smallCaps: hasSmallCaps(overrides)), derivedItalic: derivedItalic, style: style)
     }
 
-    /// A figure placeholder (LT4-1 baseline): a centered `🖼 <ref>` line with the
-    /// caption beneath it — Galley shows intent, never the image (ADR-0024). LT4-2
-    /// replaces this with a drawn `NSTextAttachment` box + an editable caption
-    /// segment (ADR-0028); this minimal version keeps the figure visible meanwhile.
-    private static func figurePlaceholder(imageRef: String, caption: String) -> NSAttributedString {
-        let style = paragraphStyle(alignment: .center, firstLineIndent: 0, spacingBefore: blockSpacing, spacingAfter: blockSpacing)
-        let out = NSMutableAttributedString()
-        let refLabel = imageRef.isEmpty ? "(image)" : imageRef
-        out.append(NSAttributedString(string: "🖼 \(refLabel)\n", attributes: [
-            .font: bodyFont,
+    /// The figure placeholder box (LT4-2): a drawn rounded-rect `NSTextAttachment`
+    /// showing a photo glyph + the image reference in monospaced type — Galley shows
+    /// intent, never the image (ADR-0024). A non-editable boundary segment (the caret
+    /// never enters it, like a scene break); the caption beneath it is the editable
+    /// part. Rendered as its own paragraph so `EditorLayout` can map it to one
+    /// segment. Internal so `EditorLayout` composes the two figure segments.
+    static func figureBox(imageRef: String) -> NSAttributedString {
+        let style = paragraphStyle(alignment: .center, firstLineIndent: 0, spacingBefore: blockSpacing, spacingAfter: 4)
+        let box = NSTextAttachment()
+        box.image = figureBoxImage(imageRef.isEmpty ? "(image ref)" : imageRef)
+        let size = box.image!.size
+        box.bounds = NSRect(x: 0, y: bodyFont.descender, width: size.width, height: size.height)
+        let out = NSMutableAttributedString(attachment: box)
+        out.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: out.length))
+        out.append(NSAttributedString(string: "\n", attributes: [.paragraphStyle: style]))
+        return out
+    }
+
+    /// The figure caption line (LT4-2, ADR-0028 Option A): the writer's caption
+    /// beneath the box, in a small italic secondary style. Rendered as its *literal*
+    /// text — an empty caption is an empty editable line — so the editor's
+    /// character↔offset mapping over this segment stays exact. No inline "(caption)"
+    /// placeholder text is injected: it would desync the editable segment's offsets,
+    /// and the box above already identifies the block. Internal so `EditorLayout`
+    /// maps it to the figure's editable caption segment.
+    static func figureCaption(_ caption: String) -> NSAttributedString {
+        let style = paragraphStyle(alignment: .center, firstLineIndent: 0, spacingAfter: blockSpacing)
+        let captionFont = NSFont(descriptor: bodyFont.fontDescriptor.withSymbolicTraits(.italic), size: bodyFont.pointSize - 1) ?? bodyFont
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: captionFont,
             .paragraphStyle: style,
             .foregroundColor: NSColor.secondaryLabelColor,
-        ]))
-        if !caption.isEmpty {
-            out.append(NSAttributedString(string: caption + "\n", attributes: [
-                .font: NSFont(descriptor: bodyFont.fontDescriptor.withSymbolicTraits(.italic), size: bodyFont.pointSize) ?? bodyFont,
-                .paragraphStyle: style,
-                .foregroundColor: NSColor.secondaryLabelColor,
-            ]))
-        }
+        ]
+        let out = NSMutableAttributedString(string: caption, attributes: attributes)
+        out.append(NSAttributedString(string: "\n", attributes: attributes))
         return out
+    }
+
+    /// Draws the figure placeholder box image: a rounded rectangle with a subtle
+    /// fill and border, a photo glyph, and `label` in monospaced type. Backing-scale
+    /// aware so it stays crisp on Retina.
+    private static func figureBoxImage(_ label: String) -> NSImage {
+        let text = "🖼  \(label)"
+        let font = NSFont.monospacedSystemFont(ofSize: bodySize, weight: .regular)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.secondaryLabelColor]
+        let textSize = (text as NSString).size(withAttributes: attributes)
+        let horizontalPadding: CGFloat = 14
+        let verticalPadding: CGFloat = 10
+        let size = NSSize(width: ceil(textSize.width) + horizontalPadding * 2,
+                          height: ceil(textSize.height) + verticalPadding * 2)
+        return NSImage(size: size, flipped: false) { rect in
+            let inset = rect.insetBy(dx: 0.5, dy: 0.5)
+            let box = NSBezierPath(roundedRect: inset, xRadius: 8, yRadius: 8)
+            NSColor.quaternaryLabelColor.withAlphaComponent(0.4).setFill()
+            box.fill()
+            box.lineWidth = 1
+            NSColor.tertiaryLabelColor.setStroke()
+            box.stroke()
+            (text as NSString).draw(at: NSPoint(x: horizontalPadding, y: verticalPadding), withAttributes: attributes)
+            return true
+        }
     }
 
     /// The scene-break ornament, centered with generous spacing.

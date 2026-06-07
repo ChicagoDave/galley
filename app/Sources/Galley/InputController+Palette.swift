@@ -105,10 +105,14 @@ extension InputController {
         }
 
         // A section drops straight into inline title editing (its seeded block is the
-        // cut's anchor) so the writer names it immediately, keyboard-first (LT3);
-        // every other insert just places the caret in the new editable block.
+        // cut's anchor) so the writer names it immediately, keyboard-first (LT3); a
+        // figure drops into its caption (the box is non-editable, so the caption is the
+        // keyboard-reachable surface, LT4-2/ADR-0028); every other insert just places
+        // the caret in the new editable block.
         if case .section = action, let seeded {
             beginTitleEditing(cut: seeded)
+        } else if case .figure = action, let seeded {
+            beginCaptionEditing(figure: seeded)
         } else if let seeded {
             renderFromModel(caret: (seeded, 0))
         } else {
@@ -127,6 +131,8 @@ extension InputController {
         switch action {
         case .sceneBreak:
             return .insertBlock(content: .sceneBreak, overrides: [], afterBlockID: anchor)
+        case .figure:
+            return .insertBlock(content: .figure(imageRef: "", caption: ""), overrides: [], afterBlockID: anchor)
         case .template(let template):
             let body = template.body.replacingOccurrences(of: "\n", with: " ")
             return .insertBlock(content: .paragraph(runs: [Run(text: body)]),

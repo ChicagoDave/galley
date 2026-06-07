@@ -100,6 +100,12 @@ final class InputController: NSTextView {
             return
         }
 
+        // Typing in a figure caption routes to the figure block, not prose (LT4-2).
+        if let captionPosition = caretCaptionPosition() {
+            insertIntoCaption(text, at: captionPosition)
+            return
+        }
+
         guard let model = buffer, let caret = caretModelPosition() else { return }
 
         // Typing below the last block (caret clamped from the empty area beneath a
@@ -167,6 +173,12 @@ final class InputController: NSTextView {
         // Backspace inside a heading edits the cut's title (LT3).
         if let titlePosition = caretTitlePosition() {
             deleteBackwardInTitle(at: titlePosition)
+            return
+        }
+
+        // Backspace inside a figure caption edits the figure's caption (LT4-2).
+        if let captionPosition = caretCaptionPosition() {
+            deleteBackwardInCaption(at: captionPosition)
             return
         }
 
